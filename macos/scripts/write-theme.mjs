@@ -108,13 +108,14 @@ if (/\p{Cc}|\u2028|\u2029/u.test(image)) {
 if (image !== requestedImage || image === "." || image === "..") {
   throw new Error("image must be a filename inside the output directory.");
 }
-if (!/\.(?:png|jpe?g|webp)$/i.test(image)) throw new Error("image must be a PNG, JPEG, or WebP filename.");
+if (!/\.(?:png|jpe?g|webp|mp4|webm)$/i.test(image)) throw new Error("image must be a PNG, JPEG, WebP, MP4, or WebM filename.");
 const canonicalOutputDir = await fs.realpath(outputDir);
 const imagePath = await fs.realpath(path.join(canonicalOutputDir, image));
 assertContainedPath(canonicalOutputDir, imagePath, "image");
 const imageStat = await fs.stat(imagePath);
-if (!imageStat.isFile() || imageStat.size < 1 || imageStat.size > 10 * 1024 * 1024) {
-  throw new Error("The prepared theme image must be non-empty and no larger than 10 MB.");
+const maxBytes = /\.(?:mp4|webm)$/i.test(image) ? 20 * 1024 * 1024 : 100 * 1024 * 1024;
+if (!imageStat.isFile() || imageStat.size < 1 || imageStat.size > maxBytes) {
+  throw new Error(`The prepared theme media must be non-empty and no larger than ${maxBytes / 1024 / 1024} MB.`);
 }
 
 const name = validateText(valueFor("name", "我的 Codex Dream Skin"), "name", 80, "我的 Codex Dream Skin");

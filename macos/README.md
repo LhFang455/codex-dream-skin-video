@@ -77,7 +77,7 @@ CSS/images.
 2. Start Codex via user `launchd` with CDP bound to `127.0.0.1` only.
 3. Accept the debug port only when it belongs to Codex (or a legitimate child).
 4. Inject only into expected `app://` renderer targets.
-5. Resolve the selected theme and image to real paths, then enforce 10 MB,
+5. Resolve the selected theme and image to real paths, then enforce 20 MiB for video themes,
    `16384px`-per-side, and 50-megapixel limits before injection.
 6. Keep a small injector alive across reloads and route changes.
 7. Pause/Restore stops the injector only when PID, executable, script path, and
@@ -150,10 +150,35 @@ complete extracted directory whose immediate children are `theme.json`, `theme.c
 referenced image. Reopen the menu afterward. Do not add another wrapper folder;
 manual placement bypasses archive checks, so use trusted content only.
 
-## Image guidelines
+## Video backgrounds: current compatibility limit
+
+Video themes are a macOS source-build feature. Use **MP4 (H.264) or WebM**, muted and
+looping. The importer accepts a video no larger than **20 MiB** and uses an embedded
+payload at or below **10 MiB**; a 10–20 MiB video is served from a tokenized local
+loopback URL instead.
+
+That 20 MiB importer limit is **not** a guaranteed playback limit. On the currently
+tested ChatGPT/Codex desktop runtime, a 17.7 MiB, 1920×1080, 60 fps H.264 test video
+reached the local server but failed during dynamic application with
+`MEDIA_ELEMENT_ERROR: Media load rejected by URL safety check`. The symptom can be a
+gray/empty background or an operation that does not complete.
+
+- **Stable recommendation:** keep each video at or below **10 MiB** (10,485,760 bytes).
+- **10–20 MiB:** experimental only; import may succeed but playback or hot switching can
+  be rejected by the desktop runtime. Do not rely on it for a distributable theme.
+- **Over 20 MiB:** rejected by this implementation before injection.
+- If the desktop runtime changes, retest with an 11 MiB sample before raising the stable
+  recommendation. Resolution and frame rate do not bypass the byte-limit behavior.
+
+This limit belongs to the current desktop runtime's URL/media policy, not to the video
+codec alone. It is recorded here so contributors do not mistake the 20 MiB validation
+cap for verified compatibility.
+
+## Image and video guidelines
 
 - PNG / JPEG / HEIC / TIFF / WebP (macOS readable)
-- Source ≤ 50 MB; prepared file ≤ 10 MB, ≤ 16384 px per side, and ≤ 50 MP
+- Images: source ≤ 50 MB, prepared image ≤ 10 MiB, dimensions ≤ 16384 px per side and ≤ 50 MP
+- Videos: see the compatibility limit above; target ≤ 10 MiB for reliable use
 - `2560 × 1440` (16:9) is the recommended master size; width ≥ 2000 px minimum
 - Keep roughly the left 50%–58% calm and low-contrast for native home content;
   place the subject in the right 58%–88% without touching the edge

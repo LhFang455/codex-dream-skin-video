@@ -191,5 +191,7 @@ cleanup_verify_output
 mark_state_active || fail "Could not commit the verified active skin state."
 write_operation_state success "$(dreamskin_text skin_applied)" "$OPERATION_TOKEN" \
   || fail "Could not publish the completed apply state."
+finish_client_operation "$PORT" success "$(dreamskin_text skin_applied)" "$OPERATION_TOKEN" 1500 \
+  || fail "Could not dismiss the completed apply operation."
 OPERATION_FINISHED="true"
 printf 'ChatGPT Dream Skin %s is active on loopback port %s.\n' "$SKIN_VERSION" "$PORT"

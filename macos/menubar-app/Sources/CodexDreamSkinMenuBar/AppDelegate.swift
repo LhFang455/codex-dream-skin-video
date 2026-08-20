@@ -59,6 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
     "scripts/injector.mjs",
     "scripts/install-dream-skin-macos.sh",
     "scripts/load-image-theme-macos.sh",
+    "scripts/load-video-theme-macos.sh",
     "scripts/localization-macos.sh",
     "scripts/pause-dream-skin-macos.sh",
     "scripts/publish-theme-import.mjs",
@@ -334,6 +335,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
     let submenu = NSMenu(title: copy.text(.themeMenu))
     submenu.autoenablesItems = false
     addActionItem(copy.text(.changeBackground), action: #selector(chooseBackgroundImage), enabled: enabled, to: submenu)
+    addActionItem(copy.resolvedLanguage == .chinese ? "选择视频背景…" : "Choose Video Background…", action: #selector(chooseBackgroundVideo), enabled: enabled, to: submenu)
     addActionItem(copy.text(.importZip), action: #selector(chooseThemeArchive), enabled: enabled, to: submenu)
     addSavedThemesMenu(enabled: enabled, to: submenu)
     submenu.addItem(.separator())
@@ -587,6 +589,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
       arguments: ["--file", imageURL.path],
       operation: copy.text(.changeBackground).replacingOccurrences(of: "…", with: "")
     )
+  }
+
+  @objc private func chooseBackgroundVideo() {
+    let panel = NSOpenPanel()
+    let title = copy.resolvedLanguage == .chinese ? "选择视频背景…" : "Choose Video Background…"
+    panel.title = title
+    panel.prompt = copy.resolvedLanguage == .chinese ? "选择" : "Choose"
+    panel.canChooseDirectories = false
+    panel.canChooseFiles = true
+    panel.allowsMultipleSelection = false
+    panel.allowedContentTypes = [.mpeg4Movie, UTType(filenameExtension: "webm")!]
+    activateForUserInteraction()
+    guard panel.runModal() == .OK, let videoURL = panel.url else { return }
+    runInstalledScript(named: "load-video-theme-macos.sh", arguments: ["--file", videoURL.path], operation: title.replacingOccurrences(of: "…", with: ""))
   }
 
   @objc private func chooseThemeArchive() {

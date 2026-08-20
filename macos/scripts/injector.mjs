@@ -1,7 +1,8 @@
 import fs from "node:fs/promises";
-import { constants as fsConstants, watch as watchFs } from "node:fs";
+import { constants as fsConstants, createReadStream, watch as watchFs } from "node:fs";
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
+import { createServer } from "node:http";
 import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
@@ -50,7 +51,8 @@ const SKIN_VERSION = "1.5.14";
 export { SKIN_VERSION };
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
 const CDP_ID_PATTERN = /^[A-Za-z0-9._-]{1,200}$/;
-const MAX_ART_BYTES = 10 * 1024 * 1024;
+const MAX_ART_BYTES = 100 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 20 * 1024 * 1024;
 const MAX_SAFE_CSS_BYTES = 256 * 1024;
 const OPERATION_UI_HOST_ID = "chatgpt-dream-skin-operation";
 const OPERATION_UI_REGISTRY_KEY = "__CHATGPT_DREAM_SKIN_OPERATION_UI__";
@@ -510,6 +512,8 @@ async function listAppTargets(port) {
 
 async function probeSession(session) {
   return session.evaluate(`(() => {
+    const canonicalRoot = location.protocol === 'app:' &&
+      location.pathname === '/index.html' && !location.search;
     const genericCodexSurface = () => {
       if (location.protocol !== 'app:') return false;
       const main = document.querySelector('main, [role="main"]');
@@ -532,7 +536,7 @@ async function probeSession(session) {
     return {
       markers,
       codex: location.protocol === 'app:' &&
-        ((markers.shell && markers.sidebar) || settings || markers.main || markers.generic),
+        ((markers.shell && markers.sidebar) || settings || markers.main || markers.generic || canonicalRoot),
     };
   })()`);
 }
@@ -732,8 +736,8 @@ export async function loadTheme(themeDir) {
   assertContainedPath(assetsRoot, imagePath, "Theme image");
   const imageStat = await fs.stat(imagePath);
   const extension = path.extname(theme.image).toLowerCase();
-  if (![".png", ".jpg", ".jpeg", ".webp"].includes(extension)) {
-    throw new Error(`Unsupported theme image format: ${extension || "missing"}`);
+  if (![".png", ".jpg", ".jpeg", ".webp", ".mp4", ".webm"].includes(extension)) {
+    throw new Error(`Unsupported theme media format: ${extension || "missing"}`);
   }
   let imageHandle;
   try {
@@ -744,25 +748,31 @@ export async function loadTheme(themeDir) {
   }
   try {
     const openedStat = await imageHandle.stat();
+    const maxBytes = [".mp4", ".webm"].includes(extension) ? MAX_VIDEO_BYTES : MAX_ART_BYTES;
     if (
       !imageStat.isFile()
       || !openedStat.isFile()
       || imageStat.dev !== openedStat.dev
       || imageStat.ino !== openedStat.ino
       || openedStat.size < 1
-      || openedStat.size > MAX_ART_BYTES
+      || openedStat.size > maxBytes
     ) {
-      throw new Error(`Theme image must be a stable non-empty file no larger than ${MAX_ART_BYTES} bytes`);
+      throw new Error(`Theme media must be a stable non-empty file no larger than ${maxBytes} bytes`);
     }
     const art = await imageHandle.readFile();
-    if (art.length < 1 || art.length > MAX_ART_BYTES) {
-      throw new Error(`Theme image must be a non-empty file no larger than ${MAX_ART_BYTES} bytes`);
+    if (art.length < 1 || art.length > maxBytes) {
+      throw new Error(`Theme media must be a non-empty file no larger than ${maxBytes} bytes`);
     }
     const safeCss = await loadSafeCss(assetsRoot);
     return {
       art,
       assetsRoot,
       extension,
+      mediaKind: [".mp4", ".webm"].includes(extension) ? "video" : "image",
+      mime: extension === ".mp4" ? "video/mp4"
+        : extension === ".webm" ? "video/webm"
+        : extension === ".jpg" || extension === ".jpeg" ? "image/jpeg"
+        : extension === ".webp" ? "image/webp" : "image/png",
       imagePath,
       safeCss: safeCss?.source ?? "",
       safeCssRuntime: safeCss?.runtimeSource ?? "",
@@ -794,26 +804,28 @@ function invalidateStaticPayloadAssets() {
   staticPayloadAssets = null;
 }
 
-export async function loadPayload(themeDir) {
+export async function loadPayload(themeDir, videoMediaUrl = null) {
   const startedAt = performance.now();
   const [staticAssets, loaded] = await Promise.all([
     loadStaticPayloadAssets(),
     loadTheme(themeDir),
   ]);
   const { css, template } = staticAssets;
-  const { art, extension, safeCssRuntime, safeCssStatus, theme } = loaded;
+  const { art, extension, imagePath, mediaKind, mime, safeCssRuntime, safeCssStatus, theme } = loaded;
   const combinedCss = safeCssRuntime ? `${css}\n${safeCssRuntime}\n` : css;
   const styleRevision = createHash("sha256").update(combinedCss).digest("hex").slice(0, 20);
-  const artMetadata = readImageMetadata(art, extension);
-  if (!artMetadata) {
+  const artMetadata = mediaKind === "image" ? readImageMetadata(art, extension) : null;
+  if (mediaKind === "image" && !artMetadata) {
     throw new Error("Theme image metadata is invalid or exceeds the 16384px / 50MP safety limit");
   }
   const artKey = createHash("sha256").update(art).digest("hex").slice(0, 20);
   theme.artMetadata = artMetadata;
+  theme.mediaKind = mediaKind;
   theme.artKey = artKey;
-  const mime = extension === ".jpg" || extension === ".jpeg" ? "image/jpeg"
-    : extension === ".webp" ? "image/webp" : "image/png";
-  const artDataUrl = `data:${mime};base64,${art.toString("base64")}`;
+  const streamedVideo = mediaKind === "video" && art.length > 10 * 1024 * 1024
+    && typeof videoMediaUrl === "string";
+  if (streamedVideo) theme.mediaUrl = videoMediaUrl;
+  const artDataUrl = streamedVideo ? "" : `data:${mime};base64,${art.toString("base64")}`;
   const revision = createHash("sha256")
     .update(SKIN_VERSION)
     .update(combinedCss)
@@ -835,6 +847,8 @@ export async function loadPayload(themeDir) {
   assertPayloadIntegrity(payload);
   return {
     imageBytes: art.length,
+    mediaPath: imagePath,
+    mediaMime: mime,
     payload,
     revision,
     safeCssStatus,
@@ -843,6 +857,57 @@ export async function loadPayload(themeDir) {
       buildMs: Number((performance.now() - startedAt).toFixed(3)),
       staticCacheHit: staticAssets.cacheHit,
     },
+  };
+}
+
+async function createVideoMediaServer() {
+  const token = randomBytes(24).toString("hex");
+  const route = `/media/${token}`;
+  let media = null;
+  const server = createServer(async (request, response) => {
+    if (request.method !== "GET" || request.url !== route || !media) {
+      response.writeHead(404).end();
+      return;
+    }
+    try {
+      const stat = await fs.stat(media.path);
+      if (!stat.isFile() || stat.size < 1) throw new Error("Theme video is unavailable");
+      let start = 0;
+      let end = stat.size - 1;
+      let status = 200;
+      const match = /^bytes=(\d*)-(\d*)$/i.exec(request.headers.range || "");
+      if (match) {
+        start = match[1] ? Number(match[1]) : start;
+        end = match[2] ? Number(match[2]) : end;
+        if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start > end || end >= stat.size) {
+          response.writeHead(416, { "Content-Range": `bytes */${stat.size}` }).end();
+          return;
+        }
+        status = 206;
+      }
+      response.writeHead(status, {
+        "Accept-Ranges": "bytes",
+        "Content-Length": end - start + 1,
+        "Content-Type": media.mime,
+        ...(status === 206 ? { "Content-Range": `bytes ${start}-${end}/${stat.size}` } : {}),
+      });
+      createReadStream(media.path, { start, end }).on("error", () => response.destroy()).pipe(response);
+    } catch {
+      response.writeHead(404).end();
+    }
+  });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("Could not bind the local video server");
+  return {
+    url: `http://127.0.0.1:${address.port}${route}`,
+    set: (payload) => { media = payload.theme.mediaKind === "video" ? {
+      path: payload.mediaPath, mime: payload.mediaMime,
+    } : null; },
+    close: () => new Promise((resolve) => server.close(resolve)),
   };
 }
 
@@ -1594,7 +1659,13 @@ async function watchOperationState(statePath, onState) {
 }
 
 async function runWatch(options) {
-  let current = await loadPayload(options.themeDir);
+  const mediaServer = await createVideoMediaServer();
+  const loadWatchPayload = async () => {
+    const payload = await loadPayload(options.themeDir, mediaServer.url);
+    mediaServer.set(payload);
+    return payload;
+  };
+  let current = await loadWatchPayload();
   const sessions = new Map();
   const rejected = new Set();
   let stopping = false;
@@ -1740,7 +1811,7 @@ async function runWatch(options) {
     const refreshEpoch = mutationEpoch;
     let next;
     try {
-      next = await loadPayload(options.themeDir);
+      next = await loadWatchPayload();
     } catch (error) {
       await Promise.all([...sessions.values()].map(async (record) => {
         if (record.session.closed) return;
@@ -2030,10 +2101,18 @@ async function runWatch(options) {
           if (controlOnly || pausing) {
             continue;
           }
-          const earlyApplied = await session.evaluate(
+          // ChatGPT rejects a loopback video URL assigned after its document
+          // has loaded. The early script is already registered above, so reload
+          // once to install the streamed source during document initialization.
+          const reloadForStreamedVideo = current.theme.mediaKind === "video"
+            && typeof current.theme.mediaUrl === "string";
+          if (reloadForStreamedVideo) {
+            await session.send("Page.reload", { ignoreCache: true });
+          }
+          const earlyApplied = reloadForStreamedVideo ? false : await session.evaluate(
             `window.__CODEX_DREAM_SKIN_EARLY_APPLIED__ === ${JSON.stringify(current.revision)}`,
           );
-          if (!earlyApplied) {
+          if (!earlyApplied && !reloadForStreamedVideo) {
             if (controlOnly || mutationEpoch !== connectionEpoch) {
               await invalidateEarly(record);
               continue;
@@ -2064,7 +2143,7 @@ async function runWatch(options) {
               1000,
             );
             recoveredPauseThisCycle = true;
-          } else if (!record.operationExternal) {
+          } else if (!record.operationExternal || activeOperation?.token !== record.operationToken) {
             await presentOperationUi(
               session, record.operationToken, "success", `已应用「${current.theme.name}」`,
             );
@@ -2117,6 +2196,7 @@ async function runWatch(options) {
         : Promise.resolve(false)));
     await Promise.all([...sessions.values()].map((record) => removeEarly(record)));
     for (const record of sessions.values()) record.session.close();
+    await mediaServer.close();
   }
 }
 
