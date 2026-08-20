@@ -23,6 +23,13 @@
   非 OpenAI 官方产品。不修改 <code>.app</code> / <code>app.asar</code> / WindowsApps。
 </p>
 
+> ## 来源与个人使用声明
+>
+> 本仓库基于 [Fei-Away/Codex-Dream-Skin](https://github.com/Fei-Away/Codex-Dream-Skin)
+> 修改，保留原项目的 MIT 许可证与版权声明。本修改版本仅供仓库维护者个人、非营利使用；
+> 不代表原项目作者的认可、合作或官方发布，也不应被表述为原项目的官方版本。若公开发布、
+> 再分发或商用，请自行复核原项目许可证及其中素材、商标和第三方内容的权利状态。
+
 ## 🤝 独家赞助
 
 <table>
@@ -239,6 +246,7 @@ macOS 菜单栏和 Windows 托盘都有「主题库 Gallery」和「在线 Studi
 ## 许可与声明
 
 - 见 [`macos/LICENSE`](./macos/LICENSE)（MIT）与 [`macos/NOTICE.md`](./macos/NOTICE.md)
+- 本仓库是基于 [Fei-Away/Codex-Dream-Skin](https://github.com/Fei-Away/Codex-Dream-Skin) 的个人非营利修改版本；原项目许可证要求保留其版权和许可文本
 - 非 OpenAI 官方产品；Codex 及相关权利归其权利人
 - 随仓库预设及效果图中的人物 / IP 素材仅作主题示意；商用或公开再分发请自行确认肖像、素材与商标权利
 

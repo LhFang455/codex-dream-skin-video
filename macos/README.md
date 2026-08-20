@@ -8,6 +8,11 @@ This project injects through **local loopback CDP**. It does **not** modify the 
 
 > Not affiliated with OpenAI. Codex is a trademark of its respective owners.
 
+> This personal, non-commercial modification is based on
+> [Fei-Away/Codex-Dream-Skin](https://github.com/Fei-Away/Codex-Dream-Skin).
+> It retains the upstream MIT license and notices; it is not endorsed by or an
+> official release of the upstream project.
+
 ## Requirements
 
 - macOS 13 Ventura or newer (the native DMG app declares macOS 13 as its minimum)
