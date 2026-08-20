@@ -1361,19 +1361,6 @@ html[data-dream-skin="active"][data-dream-media-kind="video"] [role="main"]:has(
   html[data-dream-skin="active"] [role="main"]:has([data-testid="home-icon"]) .group\/home-suggestions button { min-height: 112px !important; font-size: 12px !important; }
 }
 
-@layer dreamskin-accessibility {
-  @media (prefers-reduced-motion: reduce) {
-    html[data-dream-skin="active"] *,
-    html[data-dream-skin="active"] *::before,
-    html[data-dream-skin="active"] *::after {
-      scroll-behavior: auto !important;
-      transition-duration: .01ms !important;
-      animation-duration: .01ms !important;
-      animation-iteration-count: 1 !important;
-    }
-  }
-}
-
 /* Video-only overlay and search transparency. These semantic surfaces cover
    account menus, Codex/Work switching, command and Skill search, plus the
    search controls used by scheduled tasks and plugin pages. */
@@ -1477,4 +1464,17 @@ html[data-dream-skin="active"][data-dream-media-kind="video"] [role="main"]:has(
 html[data-dream-skin="active"][data-dream-media-kind="video"] [role="main"]:has([data-testid="home-icon"])
   .group\/home-suggestions button :is(svg, span) {
   color: #fff !important;
+}
+
+@layer dreamskin-accessibility {
+  @media (prefers-reduced-motion: reduce) {
+    html[data-dream-skin="active"] *,
+    html[data-dream-skin="active"] *::before,
+    html[data-dream-skin="active"] *::after {
+      scroll-behavior: auto !important;
+      transition-duration: .01ms !important;
+      animation-duration: .01ms !important;
+      animation-iteration-count: 1 !important;
+    }
+  }
 }

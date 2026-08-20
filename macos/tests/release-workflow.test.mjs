@@ -28,5 +28,10 @@ assert.doesNotMatch(
   /main_sha="\$\(git rev-parse origin\/main\)"/,
   "The release candidate must not be rebound to a later origin/main tip.",
 );
+assert.match(
+  workflow,
+  /if \[\[ "\$previous_version" == "\$version" \]\]; then\s*version_unchanged="true"\s*should_release="false"/,
+  "A normal push that does not change the version must finish without starting a release.",
+);
 
 console.log("PASS: Release workflow binds assets and tag to the exact event commit.");

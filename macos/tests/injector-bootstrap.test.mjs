@@ -192,8 +192,8 @@ assert.match(
 );
 assert.match(
   source,
-  /const earlyApplied = await session\.evaluate\([\s\S]*if \(!earlyApplied\) \{[\s\S]*applyToSession/,
-  "The watcher must not run the full payload twice after a successful early install.",
+  /const earlyApplied = reloadForStreamedVideo \? false : await session\.evaluate\([\s\S]*if \(!earlyApplied && !reloadForStreamedVideo\) \{[\s\S]*applyToSession/,
+  "The watcher must use the normal early-install guard for images and avoid a second payload install after a streamed-video reload.",
 );
 assert.match(
   source,

@@ -11,7 +11,7 @@
     "data-dream-skin", SHELL_ATTR,
     "data-dream-art-wide", "data-dream-art-safe", "data-dream-task-mode",
     "data-dream-art-safe-area", "data-dream-art-task-mode", "data-dream-art-aspect",
-    "data-dream-art-ready",
+    "data-dream-art-ready", "data-dream-media-kind",
   ];
   const VERSION = __DREAM_SKIN_VERSION_JSON__;
   const STYLE_REVISION = __DREAM_SKIN_STYLE_REVISION_JSON__;
@@ -20,6 +20,7 @@
   const ART = THEME.art && typeof THEME.art === "object" ? THEME.art : {};
   const ART_METADATA = THEME.artMetadata && typeof THEME.artMetadata === "object"
     ? THEME.artMetadata : null;
+  const MEDIA_KIND = THEME.mediaKind === "video" ? "video" : "image";
   const ANALYSIS_CACHE_KEY = "__CODEX_DREAM_SKIN_ANALYSIS_CACHE__";
   const THEME_VARIABLES = [
     "--ds-bg", "--ds-panel", "--ds-panel-2", "--ds-green", "--ds-lime", "--ds-on-accent",
@@ -89,6 +90,7 @@
   const styleRegistry = existingStyleRegistry instanceof Set ? existingStyleRegistry : new Set();
   window[STYLE_REGISTRY_KEY] = styleRegistry;
   const artUrl = (() => {
+    if (MEDIA_KIND === "video" && typeof THEME.mediaUrl === "string") return null;
     const comma = artDataUrl.indexOf(",");
     const mime = /^data:([^;,]+)/.exec(artDataUrl)?.[1] || "image/png";
     const binary = atob(artDataUrl.slice(comma + 1));
@@ -96,6 +98,24 @@
     for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
     return URL.createObjectURL(new Blob([bytes], { type: mime }));
   })();
+  let videoNode = null;
+
+  const installVideoLayer = () => {
+    if (MEDIA_KIND !== "video" || !document.body) return;
+    videoNode = document.createElement("video");
+    videoNode.id = "codex-dream-skin-video";
+    videoNode.autoplay = true;
+    videoNode.loop = true;
+    videoNode.muted = true;
+    videoNode.playsInline = true;
+    videoNode.src = THEME.mediaUrl || artUrl;
+    Object.assign(videoNode.style, {
+      position: "fixed", inset: "0", width: "100vw", height: "100vh",
+      objectFit: "cover", pointerEvents: "none", zIndex: "0",
+    });
+    document.body.prepend(videoNode);
+    void videoNode.play().catch(() => {});
+  };
 
   const cssString = (value) => JSON.stringify(String(value ?? ""));
 
@@ -414,6 +434,62 @@
     setStyleProperty(root, "--ds-theme-image-focus-y", String(Number(focusY.toFixed(4))));
   };
 
+  const analyzeVideoPalette = () => new Promise((resolve) => {
+    const startedAt = now();
+    metrics.analysisRuns += 1;
+    if (!videoNode || !document?.createElement) {
+      metrics.analysisMs = Number((now() - startedAt).toFixed(3));
+      resolve(null);
+      return;
+    }
+    let settled = false;
+    let timer = null;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      videoNode.removeEventListener("loadeddata", sample);
+      videoNode.removeEventListener("canplay", sample);
+      metrics.analysisMs = Number((now() - startedAt).toFixed(3));
+      resolve(value);
+    };
+    const sample = () => {
+      if (videoNode.readyState < 2 || videoNode.videoWidth < 1 || videoNode.videoHeight < 1) return;
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = 64;
+        canvas.height = 36;
+        const context = canvas.getContext?.("2d", { willReadFrequently: true });
+        if (!context) throw new Error("Canvas is unavailable");
+        context.drawImage(videoNode, 0, 0, canvas.width, canvas.height);
+        const bins = Array.from({ length: 24 }, () => ({ weight: 0, r: 0, g: 0, b: 0 }));
+        const data = context.getImageData(0, 0, canvas.width, canvas.height).data;
+        for (let offset = 0; offset < data.length; offset += 4) {
+          if (data[offset + 3] < 32) continue;
+          const rgb = { r: data[offset], g: data[offset + 1], b: data[offset + 2] };
+          const hsl = rgbToHsl(rgb);
+          if (hsl.s < 0.16 || hsl.l < 0.16 || hsl.l > 0.86) continue;
+          const bin = bins[Math.min(23, Math.floor(hsl.h / 15))];
+          const weight = hsl.s * (1 - Math.abs(hsl.l - 0.52) * 0.85);
+          bin.weight += weight;
+          bin.r += rgb.r * weight;
+          bin.g += rgb.g * weight;
+          bin.b += rgb.b * weight;
+        }
+        const dominant = bins.reduce((best, candidate) => candidate.weight > best.weight ? candidate : best, bins[0]);
+        finish(dominant.weight > 0 ? {
+          accentRgb: { r: dominant.r / dominant.weight, g: dominant.g / dominant.weight, b: dominant.b / dominant.weight },
+        } : null);
+      } catch {
+        finish(null);
+      }
+    };
+    timer = setTimeout(() => finish(null), 6000);
+    videoNode.addEventListener("loadeddata", sample, { once: true });
+    videoNode.addEventListener("canplay", sample, { once: true });
+    sample();
+  });
+
   const analyzeArt = () => new Promise((resolve) => {
     const startedAt = now();
     metrics.analysisRuns += 1;
@@ -604,14 +680,16 @@
   };
 
   installStyle();
+  installVideoLayer();
 
   const applyRootState = (root) => {
     metrics.rootPasses += 1;
     ensureStyle();
     const shell = resolvedShell();
     setAttribute(root, "data-dream-skin", "active");
+    setAttribute(root, "data-dream-media-kind", MEDIA_KIND);
     setAttribute(root, SHELL_ATTR, shell);
-    setStyleProperty(root, "--dream-skin-art", `url("${artUrl}")`);
+    setStyleProperty(root, "--dream-skin-art", MEDIA_KIND === "image" ? `url("${artUrl}")` : "none");
     applyTheme(root, shell);
     applyArtMetadata(root);
     return shell;
@@ -818,6 +896,8 @@
     if (document.getElementById(STYLE_ID) === styleNode) document.getElementById(STYLE_ID)?.remove();
     if (styleRegistry.size === 0) delete window[STYLE_REGISTRY_KEY];
     if (state?.artUrl) URL.revokeObjectURL(state.artUrl);
+    state?.videoNode?.pause();
+    state?.videoNode?.remove();
     delete window[STATE_KEY];
     return true;
   };
@@ -873,6 +953,7 @@
     navigation: navigationApi,
     navigationHandler,
     artUrl,
+    videoNode,
     installToken,
     styleMode,
     styleNode,
@@ -930,7 +1011,8 @@
   if (navigationHandler && navigationApi) {
     navigationApi.addEventListener("navigate", navigationHandler);
   }
-  const analysisPromise = artAnalysis ? Promise.resolve(null) : analyzeArt();
+  const analysisPromise = artAnalysis ? Promise.resolve(null)
+    : MEDIA_KIND === "video" ? analyzeVideoPalette() : analyzeArt();
   window[STATE_KEY].analysisTimer = analysisTimer;
   analysisPromise.then((analysis) => {
     const state = window[STATE_KEY];

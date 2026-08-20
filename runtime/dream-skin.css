@@ -217,6 +217,40 @@ html[data-dream-skin="active"] body::before {
   content: none;
 }
 
+html[data-dream-skin="active"][data-dream-media-kind="video"] body { background: transparent !important; }
+html[data-dream-skin="active"][data-dream-media-kind="video"] body > :not(#codex-dream-skin-video) { position: relative; z-index: 1; }
+html[data-dream-skin="active"][data-dream-media-kind="video"] main:is(.main-surface, [data-app-shell-main-surface], [class*="_MainContentSurface_"]),
+html[data-dream-skin="active"][data-dream-media-kind="video"] [data-ds-part="main"] {
+  background: rgb(var(--ds-bg-rgb) / .24) !important;
+  backdrop-filter: none !important;
+}
+
+html[data-dream-skin="active"][data-dream-media-kind="video"] aside.app-shell-left-panel {
+  background: linear-gradient(180deg,
+    rgb(var(--ds-panel-rgb) / .12),
+    rgb(var(--ds-bg-rgb) / .08)) !important;
+  border-color: rgb(var(--ds-accent-rgb) / .36) !important;
+  box-shadow: 10px 0 30px rgb(var(--ds-bg-rgb) / .08) !important;
+  backdrop-filter: none !important;
+}
+
+html[data-dream-skin="active"][data-dream-media-kind="video"] main:is(.main-surface, [data-app-shell-main-surface], [class*="_MainContentSurface_"])
+  div[class~="bg-token-main-surface-primary"][class~="border-l"],
+html[data-dream-skin="active"][data-dream-media-kind="video"] main:is(.main-surface, [data-app-shell-main-surface], [class*="_MainContentSurface_"]):not(:has([role="main"])) article,
+html[data-dream-skin="active"][data-dream-media-kind="video"] main:is(.main-surface, [data-app-shell-main-surface], [class*="_MainContentSurface_"]) > header:is(.app-header-tint, [data-app-shell-header-edge-scroll], [class*="_Header_"]) {
+  background: rgb(var(--ds-panel-rgb) / .42) !important;
+  backdrop-filter: none !important;
+}
+
+html[data-dream-skin="active"][data-dream-media-kind="video"] .composer-surface-chrome,
+html[data-dream-skin="active"][data-dream-media-kind="video"] [class*="_homeUtilityBar_"],
+html[data-dream-skin="active"][data-dream-media-kind="video"] [data-ds-part="composer"] {
+  background: rgb(var(--ds-panel-rgb) / .10) !important;
+  border-color: rgb(var(--ds-accent-rgb) / .34) !important;
+  box-shadow: 0 10px 24px rgb(var(--ds-bg-rgb) / .08) !important;
+  backdrop-filter: none !important;
+}
+
 html[data-dream-skin="active"] __DREAM_SELECTOR_LEFT_PANEL__ {
   background:
     linear-gradient(180deg,
@@ -1279,6 +1313,28 @@ html[data-dream-skin="active"] button[class~="bg-token-foreground"] {
 html[data-dream-skin="active"] article,
 html[data-dream-skin="active"] [data-ds-part="message"] { border-radius: 16px; }
 
+/* Final video surface overrides: these deliberately follow the generic
+   composer and task-card rules so local video remains visible everywhere. */
+html[data-dream-skin="active"][data-dream-media-kind="video"] .composer-surface-chrome,
+html[data-dream-skin="active"][data-dream-media-kind="video"] [class*="_homeUtilityBar_"],
+html[data-dream-skin="active"][data-dream-media-kind="video"] [data-ds-part="composer"] {
+  background: rgb(var(--ds-panel-rgb) / .10) !important;
+  border: 1px solid rgb(var(--ds-accent-rgb) / .34) !important;
+  box-shadow: 0 10px 24px rgb(var(--ds-bg-rgb) / .08) !important;
+  backdrop-filter: none !important;
+}
+
+html[data-dream-skin="active"][data-dream-media-kind="video"] main:is(.main-surface, [data-app-shell-main-surface], [class*="_MainContentSurface_"])
+  div[class~="bg-token-main-surface-primary"][class~="border-l"],
+html[data-dream-skin="active"][data-dream-media-kind="video"] main:is(.main-surface, [data-app-shell-main-surface], [class*="_MainContentSurface_"]):not(:has([role="main"])) article,
+html[data-dream-skin="active"][data-dream-media-kind="video"] [role="main"]:has([data-testid="home-icon"])
+  div:has(> .horizontal-scroll-fade-mask .group\/project-selector) {
+  background: rgb(var(--ds-panel-rgb) / .14) !important;
+  border-color: rgb(var(--ds-accent-rgb) / .28) !important;
+  box-shadow: 0 8px 20px rgb(var(--ds-bg-rgb) / .08) !important;
+  backdrop-filter: none !important;
+}
+
 @media (max-width: 1120px) {
   html[data-dream-skin="active"]
     __DREAM_SELECTOR_SHELL_MAIN__:has(__DREAM_SELECTOR_HOME_ROUTE_CSS__)::after { content: none; }
@@ -1303,6 +1359,111 @@ html[data-dream-skin="active"] [data-ds-part="message"] { border-radius: 16px; }
   html[data-dream-skin="active"] __DREAM_SELECTOR_HOME_ROUTE__ __DREAM_SELECTOR_GAME_SOURCE__::before { margin-bottom: 7px; font-size: 10px; }
   html[data-dream-skin="active"] __DREAM_SELECTOR_HOME_ROUTE__ __DREAM_SELECTOR_GAME_SOURCE__::after { margin-top: 9px; font-size: 11px; }
   html[data-dream-skin="active"] __DREAM_SELECTOR_HOME_ROUTE__ __DREAM_SELECTOR_HOME_SUGGESTIONS__ button { min-height: 112px !important; font-size: 12px !important; }
+}
+
+/* Video-only overlay and search transparency. These semantic surfaces cover
+   account menus, Codex/Work switching, command and Skill search, plus the
+   search controls used by scheduled tasks and plugin pages. */
+html[data-dream-skin="active"][data-dream-media-kind="video"] :is([role="menu"], [role="dialog"], [data-radix-popper-content-wrapper], [class~="bg-token-dropdown-background"], [class~="bg-token-main-surface-primary"]),
+html[data-dream-skin="active"][data-dream-media-kind="video"] :is([role="searchbox"], input[type="search"], input[type="text"], textarea, [contenteditable="true"], [role="textbox"]) {
+  background: rgb(var(--ds-panel-rgb) / .08) !important;
+  border-color: rgb(var(--ds-accent-rgb) / .30) !important;
+  box-shadow: 0 8px 20px rgb(var(--ds-bg-rgb) / .06) !important;
+  backdrop-filter: none !important;
+}
+
+html[data-dream-skin="active"][data-dream-media-kind="video"] [data-radix-popper-content-wrapper] > * {
+  background: transparent !important;
+}
+
+/* Keep menus legible while leaving the permanent composer and diff rows clear. */
+html[data-dream-skin="active"][data-dream-media-kind="video"] :is([role="menu"], [role="dialog"], [data-radix-popper-content-wrapper]) {
+  background: rgb(var(--ds-panel-rgb) / .38) !important;
+  border-color: rgb(var(--ds-accent-rgb) / .34) !important;
+  box-shadow: 0 12px 28px rgb(var(--ds-bg-rgb) / .14) !important;
+}
+
+html[data-dream-skin="active"][data-dream-media-kind="video"] .composer-surface-chrome > :not(button),
+html[data-dream-skin="active"][data-dream-media-kind="video"] .composer-surface-chrome :is(form, textarea, [contenteditable="true"], [role="textbox"], .ProseMirror),
+html[data-dream-skin="active"][data-dream-media-kind="video"] article :is(div, section, li) {
+  background: transparent !important;
+  backdrop-filter: none !important;
+}
+
+/* Home is a permanent surface, not a popover: show the video through it. */
+html[data-dream-skin="active"][data-dream-media-kind="video"] .composer-surface-chrome {
+  background: transparent !important;
+  box-shadow: inset 0 0 0 1px rgb(var(--ds-accent-rgb) / .34) !important;
+}
+
+html[data-dream-skin="active"][data-dream-media-kind="video"] [role="main"]:has([data-testid="home-icon"])
+  .group\/home-suggestions button {
+  background: rgb(var(--ds-panel-rgb) / .28) !important;
+  box-shadow: inset 0 0 0 1px rgb(var(--ds-accent-rgb) / .34) !important;
+  backdrop-filter: none !important;
+}
+
+html[data-dream-skin="active"][data-dream-media-kind="video"] [class*="_ComposerLayoutRoot_"] {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+html[data-dream-skin="active"][data-dream-media-kind="video"] [class*="_ComposerLayoutFooter_"] {
+  background: rgb(var(--ds-panel-rgb) / .14) !important;
+}
+
+html[data-dream-skin="active"][data-dream-media-kind="video"] :is([role="dialog"], [data-radix-popper-content-wrapper])
+  :is([role="searchbox"], input[type="search"], input[type="text"], textarea, [contenteditable="true"], [role="textbox"]) {
+  background: rgb(var(--ds-panel-rgb) / .38) !important;
+}
+
+/* Keep home and active conversations visually consistent: the sidebar remains
+   darker, while the main area has one shared, lighter video tint. */
+html[data-dream-skin="active"][data-dream-media-kind="video"] aside.app-shell-left-panel {
+  background: rgb(var(--ds-panel-rgb) / .40) !important;
+  border-right-color: transparent !important;
+  box-shadow: none !important;
+}
+
+html[data-dream-skin="active"][data-dream-media-kind="video"] main {
+  background: transparent !important;
+  backdrop-filter: none !important;
+}
+
+html[data-dream-skin="active"][data-dream-media-kind="video"] main[class*="_MainContentSurface_"] {
+  background: rgb(var(--ds-bg-rgb) / .24) !important;
+  border-left-color: transparent !important;
+  box-shadow: none !important;
+}
+
+html[data-dream-skin="active"][data-dream-media-kind="video"] main .absolute.inset-0.z-10.bg-surface {
+  background: transparent !important;
+}
+
+html[data-dream-skin="active"][data-dream-media-kind="video"] main [class*="bg-surface-elevated-secondary/50"] {
+  background: transparent !important;
+}
+
+html[data-dream-skin="active"][data-dream-media-kind="video"] [class*="_ComposerLayoutFooter_"],
+html[data-dream-skin="active"][data-dream-media-kind="video"] main .ProseMirror {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Bright video frames can wash out the palette-derived purple home accents.
+   Keep the home brand, project name, and suggestion symbols readable. */
+html[data-dream-skin="active"][data-dream-media-kind="video"] [role="main"]:has([data-testid="home-icon"])
+  [data-feature="game-source"],
+html[data-dream-skin="active"][data-dream-media-kind="video"] [role="main"]:has([data-testid="home-icon"])
+  [data-feature="game-source"] * {
+  color: #fff !important;
+  text-shadow: 0 1px 7px rgb(var(--ds-bg-rgb) / .72) !important;
+}
+
+html[data-dream-skin="active"][data-dream-media-kind="video"] [role="main"]:has([data-testid="home-icon"])
+  .group\/home-suggestions button :is(svg, span) {
+  color: #fff !important;
 }
 
 @layer dreamskin-accessibility {

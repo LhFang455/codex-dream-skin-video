@@ -87,6 +87,8 @@ jobs:
             previous_version="$(git show "$BEFORE_SHA:macos/VERSION" 2>/dev/null | tr -d '[:space:]' || true)"
             if [[ "$previous_version" == "$version" ]]; then
               version_unchanged="true"
+              should_release="false"
+              echo "Version is unchanged; skipping release publication."
             else
               [[ "$previous_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
                 echo "Previous main version is invalid: $previous_version" >&2
