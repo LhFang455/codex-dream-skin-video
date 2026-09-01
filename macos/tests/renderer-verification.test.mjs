@@ -55,6 +55,7 @@ function makeDomFixture({
   sidebar = makeElement(),
   composer = makeElement(),
   settings = null,
+  video = null,
   visibilityState = "visible",
   viewportWidth = 1280,
   viewportHeight = 800,
@@ -81,7 +82,8 @@ function makeDomFixture({
       return null;
     },
     querySelectorAll: () => [],
-    getElementById: (id) => id === "codex-dream-skin-style" ? styleNode : null,
+    getElementById: (id) => id === "codex-dream-skin-style" ? styleNode
+      : id === "codex-dream-skin-video" ? video : null,
   };
   const window = {
     __CODEX_DREAM_SKIN_STATE__: {
@@ -177,6 +179,34 @@ test("transient Runtime.evaluate failures are retried inside the bounded deadlin
     1,
   );
   assert.equal(result.pass, true);
+  assert.equal(session.evaluateCount, 2);
+});
+
+test("video verification requires two decoded samples with advancing playback time", async () => {
+  let currentTime = 0.5;
+  const video = {
+    present: true,
+    readyState: 4,
+    videoWidth: 1920,
+    videoHeight: 1080,
+    paused: false,
+    error: null,
+    get currentTime() {
+      currentTime += 0.05;
+      return currentTime;
+    },
+  };
+  const session = makeSession({ dom: makeDomFixture({ video }) });
+  const result = await waitForVerifiedSession(
+    session,
+    100,
+    "fixture-theme",
+    "fixture-revision",
+    1,
+    "video",
+  );
+  assert.equal(result.pass, true);
+  assert.equal(result.video.progressing, true);
   assert.equal(session.evaluateCount, 2);
 });
 

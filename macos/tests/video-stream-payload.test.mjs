@@ -23,6 +23,12 @@ test("small video payload streams without entering the injected JavaScript", asy
     /http:\/\/127\.0\.0\.1:32100\/media\/test-token\?v=[0-9a-f]{20}/,
   );
   assert.ok(Buffer.byteLength(loaded.payload) < 4 * 1024 * 1024);
+  const reloaded = await loadPayload(themeDir, "http://127.0.0.1:32101/media/next-token");
+  assert.equal(
+    reloaded.revision,
+    loaded.revision,
+    "the same video content must keep its renderer revision when the loopback token changes",
+  );
 });
 
 test("medium video payload streams instead of inflating the injected payload", async (t) => {

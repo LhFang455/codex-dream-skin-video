@@ -11,30 +11,35 @@ const css = readFileSync(join(root, "assets", "dream-skin.css"), "utf8");
 const renderer = readFileSync(join(root, "assets", "renderer-inject.js"), "utf8");
 const injector = readFileSync(join(root, "scripts", "injector.mjs"), "utf8");
 
-test("video hot apply completes the page operation after starting its watcher", () => {
+test("video hot apply keeps a healthy watcher and waits for playback evidence", () => {
   const videoBranch = common.match(/case "\$theme_media" in([\s\S]*?)\n  esac/);
   assert.ok(videoBranch, "hot apply must have a video-media branch");
+  assert.doesNotMatch(
+    videoBranch[1],
+    /stop_recorded_injector/,
+    "video switching must not kill the loopback server that owns the current page URL",
+  );
   assert.match(
     videoBranch[1],
-    /write_operation_state success[\s\S]*?finish_client_operation "\$port" success/,
-    "a persisted success state alone leaves the page's applying overlay visible",
+    /wait_for_video_apply_ack/,
+    "video switching must wait for the watcher to confirm real playback",
   );
 });
 
-test("video hot apply refreshes the page after rotating its local media URL", () => {
+test("video hot apply stages a watcher refresh without rotating its server", () => {
   const videoBranch = common.match(/case "\$theme_media" in([\s\S]*?)\n  esac/);
   assert.ok(videoBranch, "hot apply must have a video-media branch");
   assert.match(
     videoBranch[1],
-    /launch_injector_daemon[\s\S]*?touch "\$THEME_DIR\/theme\.json"/,
-    "a replacement video server needs a theme refresh so the renderer receives its new URL",
+    /touch "\$THEME_DIR\/theme\.json"[\s\S]*?wait_for_video_apply_ack/,
+    "the stable watcher must observe the staged video before success is reported",
   );
 });
 
 test("the watcher reloads a loaded page before installing a streamed video URL", () => {
   assert.match(
     injector,
-    /current\.theme\.mediaKind === "video"[\s\S]*?typeof current\.theme\.mediaUrl === "string"[\s\S]*?Page\.reload/,
+    /current\.theme\.mediaKind === "video"[\s\S]*?Page\.reload/,
     "a hot video URL must be installed during document initialization, not assigned into an already-loaded page",
   );
 });

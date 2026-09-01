@@ -255,6 +255,15 @@ export function assessRendererVerification(renderer, nativeWindow, expected) {
     && structurePass && windowPass && !result.documentOverflow?.x;
   const payloadPass = (!expected.expectedThemeId || result.themeId === expected.expectedThemeId)
     && (!expected.expectedRevision || result.revision === expected.expectedRevision);
+  const videoPass = expected.expectedMediaKind !== "video" || Boolean(
+    result.video?.present
+    && Number(result.video.readyState) >= 2
+    && Number(result.video.videoWidth) > 0
+    && Number(result.video.videoHeight) > 0
+    && Number(result.video.errorCode) === 0
+    && result.video.paused === false
+    && result.video.progressing === true,
+  );
   const visibleSuggestionLabels = Array.isArray(result.suggestionLabels)
     ? result.suggestionLabels.filter((item) => item?.visible) : [];
   const homeFallbackVisible = Boolean(homeRoute && result.homePresent && result.genericMain?.visible);
@@ -274,10 +283,11 @@ export function assessRendererVerification(renderer, nativeWindow, expected) {
     nativeWindowPass,
     payloadPass,
     structurePass,
+    videoPass,
     viewportPass,
     windowPass,
   };
-  result.pass = Boolean(basePass && homePass && payloadPass);
+  result.pass = Boolean(basePass && homePass && payloadPass && videoPass);
   result.expectedThemeId = expected.expectedThemeId;
   result.expectedRevision = expected.expectedRevision;
   result.softNotes = {
@@ -512,6 +522,8 @@ async function listAppTargets(port) {
 
 async function probeSession(session) {
   return session.evaluate(`(() => {
+    const canonicalRoot = location.protocol === 'app:' &&
+      location.pathname === '/index.html' && !location.search;
     const initialRoute = new URLSearchParams(String(location.search || ''))
       .get('initialRoute') || '';
     const pathname = String(location.pathname || '');
@@ -542,7 +554,7 @@ async function probeSession(session) {
       markers,
       excludedPetSurface,
       codex: !excludedPetSurface && location.protocol === 'app:' &&
-        ((markers.shell && markers.sidebar) || settings || markers.main || markers.generic),
+        ((markers.shell && markers.sidebar) || settings || markers.main || markers.generic || canonicalRoot),
     };
   })()`);
 }
@@ -859,11 +871,13 @@ export async function loadPayload(themeDir, videoMediaUrl = null) {
     theme.mediaUrl = `${videoMediaUrl}?v=${artKey}`;
   }
   const artDataUrl = mediaKind === "video" ? "" : `data:${mime};base64,${art.toString("base64")}`;
+  const revisionTheme = { ...theme };
+  delete revisionTheme.mediaUrl;
   const revision = createHash("sha256")
     .update(SKIN_VERSION)
     .update(combinedCss)
     .update(template)
-    .update(JSON.stringify(theme))
+    .update(JSON.stringify(revisionTheme))
     .digest("hex")
     .slice(0, 20);
   // Every replacement value must be supplied as a function. A plain string
@@ -1243,7 +1257,13 @@ export async function inspectNativeWindow(session) {
   }
 }
 
-export async function verifySession(session, expectedThemeId = null, expectedRevision = null) {
+export async function verifySession(
+  session,
+  expectedThemeId = null,
+  expectedRevision = null,
+  expectedMediaKind = null,
+  previousVideoTime = null,
+) {
   const renderer = await session.evaluate(`(() => {
     const box = (node) => {
       if (!node) return null;
@@ -1333,6 +1353,7 @@ export async function verifySession(session, expectedThemeId = null, expectedRev
       [...document.adoptedStyleSheets].includes(runtime.styleSheet);
     const fallback = runtime?.styleMode === 'style' &&
       document.getElementById('codex-dream-skin-style') === runtime.styleNode;
+    const videoNode = document.getElementById('codex-dream-skin-video');
     const result = {
       installed: document.documentElement.getAttribute('data-dream-skin') === 'active',
       documentVisibility: document.visibilityState,
@@ -1359,6 +1380,15 @@ export async function verifySession(session, expectedThemeId = null, expectedRev
       genericMain,
       genericInput,
       settings,
+      video: videoNode ? {
+        present: true,
+        readyState: videoNode.readyState,
+        videoWidth: videoNode.videoWidth,
+        videoHeight: videoNode.videoHeight,
+        paused: videoNode.paused,
+        currentTime: videoNode.currentTime,
+        errorCode: videoNode.error?.code ?? 0,
+      } : null,
       viewport: { width: innerWidth, height: innerHeight },
       documentOverflow: {
         x: document.documentElement.scrollWidth > document.documentElement.clientWidth,
@@ -1367,11 +1397,18 @@ export async function verifySession(session, expectedThemeId = null, expectedRev
     };
     return result;
   })()`);
+  if (renderer.video) {
+    const currentTime = Number(renderer.video.currentTime);
+    renderer.video.progressing = Number.isFinite(previousVideoTime)
+      && Number.isFinite(currentTime)
+      && currentTime - previousVideoTime >= 0.01;
+  }
   const nativeWindow = await inspectNativeWindow(session);
   return assessRendererVerification(renderer, nativeWindow, {
     skinVersion: SKIN_VERSION,
     expectedThemeId,
     expectedRevision,
+    expectedMediaKind,
   });
 }
 
@@ -1381,16 +1418,37 @@ export async function waitForVerifiedSession(
   expectedThemeId = null,
   expectedRevision = null,
   retryDelayMs = 500,
+  expectedMediaKind = null,
 ) {
   const deadline = Date.now() + timeoutMs;
   const retryDelay = Number.isFinite(retryDelayMs) && retryDelayMs >= 0 ? retryDelayMs : 500;
   let lastResult;
   let lastError;
+  let previousVideoTime = null;
   while (Date.now() < deadline) {
     try {
-      lastResult = await verifySession(session, expectedThemeId, expectedRevision);
+      lastResult = await verifySession(
+        session,
+        expectedThemeId,
+        expectedRevision,
+        expectedMediaKind,
+        previousVideoTime,
+      );
       lastError = null;
       if (lastResult.pass) return lastResult;
+      const sampledTime = Number(lastResult.video?.currentTime);
+      if (
+        expectedMediaKind === "video"
+        && lastResult.video?.present
+        && Number(lastResult.video.readyState) >= 2
+        && Number(lastResult.video.videoWidth) > 0
+        && Number(lastResult.video.videoHeight) > 0
+        && Number(lastResult.video.errorCode) === 0
+        && lastResult.video.paused === false
+        && Number.isFinite(sampledTime)
+      ) {
+        previousVideoTime = sampledTime;
+      }
     } catch (error) {
       // Renderer navigations can invalidate Runtime.evaluate while Codex is
       // swapping documents. Treat that as a transient sample until the same
@@ -1459,6 +1517,8 @@ async function runFinishOperation(options) {
 
 async function runOneShot(options) {
   const connected = await connectCodexTargets(options.port, options.timeoutMs);
+  const needsPayload = options.mode === "once" || options.mode === "verify" || options.reload;
+  const mediaServer = needsPayload ? await createVideoMediaServer() : null;
   const operationToken = options.mode === "once" || options.mode === "remove"
     ? options.operationToken ?? nextOperationToken()
     : null;
@@ -1472,9 +1532,8 @@ async function runOneShot(options) {
   }
   let loaded = null;
   try {
-    loaded = (options.mode === "once" || options.mode === "verify" || options.reload)
-      ? await loadPayload(options.themeDir)
-      : null;
+    loaded = needsPayload ? await loadPayload(options.themeDir, mediaServer.url) : null;
+    if (loaded) mediaServer.set(loaded);
   } catch (error) {
     if (operationToken) {
       await Promise.all(connected.map(({ session }) => presentOperationUi(
@@ -1482,6 +1541,7 @@ async function runOneShot(options) {
       )));
     }
     for (const { session } of connected) session.close();
+    await mediaServer?.close();
     throw error;
   }
   const payload = loaded?.payload ?? null;
@@ -1526,6 +1586,8 @@ async function runOneShot(options) {
           options.timeoutMs,
           loaded?.theme.id ?? null,
           loaded?.revision ?? null,
+          500,
+          loaded?.theme.mediaKind ?? null,
         );
       results.push({ targetId: target.id, markers: probe?.markers, result });
       if (operationToken) {
@@ -1570,6 +1632,7 @@ async function runOneShot(options) {
   console.log(JSON.stringify({ mode: options.mode, version: SKIN_VERSION, port: options.port, targets: results }, null, 2));
   const failed = results.length === 0 || results.some((item) =>
     item.error || (options.mode === "remove" ? item.result !== true : !item.result?.pass));
+  await mediaServer?.close();
   if (failed) process.exitCode = 2;
 }
 
@@ -1662,7 +1725,9 @@ async function readOperationState(statePath) {
 
 async function writeModeAck(ackPath, operationToken, mode) {
   if (!ackPath) return;
-  if (mode !== "control" && mode !== "full") throw new Error("Invalid injector ACK mode");
+  if (!["control", "full", "applied", "failed"].includes(mode)) {
+    throw new Error("Invalid injector ACK mode");
+  }
   const temporary = `${ackPath}.${process.pid}.tmp`;
   const payload = `${JSON.stringify({
     operationToken,
@@ -1902,6 +1967,9 @@ async function runWatch(options) {
     try {
       next = await loadWatchPayload();
     } catch (error) {
+      if (activeOperation?.status === "applying") {
+        await writeModeAck(options.operationAck, activeOperation.token, "failed");
+      }
       await Promise.all([...sessions.values()].map(async (record) => {
         if (record.session.closed) return;
         const externalOperation = activeOperation;
@@ -1923,6 +1991,9 @@ async function runWatch(options) {
       console.log(`[dream-skin] staged theme ${current.theme.id} while skin is paused`);
       return;
     }
+    const applyAckToken = current.theme.mediaKind === "video"
+      && activeOperation?.status === "applying" ? activeOperation.token : null;
+    let verifiedTargets = 0;
     for (const record of sessions.values()) {
       const { session } = record;
       if (session.closed) continue;
@@ -1947,15 +2018,22 @@ async function runWatch(options) {
         }
         record.earlyScriptId = nextIdentifier;
         record.needsLoadFallback = !nextIdentifier;
-        await applyToSession(session, current.payload);
+        if (current.theme.mediaKind === "video") {
+          await session.send("Page.reload", { ignoreCache: true });
+        } else {
+          await applyToSession(session, current.payload);
+        }
         if (controlOnly || mutationEpoch !== refreshEpoch) continue;
         const verification = await waitForVerifiedSession(
           session,
           Math.min(options.timeoutMs, 8000),
           current.theme.id,
           current.revision,
+          500,
+          current.theme.mediaKind,
         );
         if (!verification?.pass) throw new Error("Theme refresh verification failed");
+        verifiedTargets += 1;
         if (!externalOperation) {
           await presentOperationUi(session, operationToken, "success", `已应用「${current.theme.name}」`);
         }
@@ -1965,6 +2043,13 @@ async function runWatch(options) {
           await presentOperationUi(session, operationToken, "error", "主题切换失败，未确认应用");
         }
         console.error(`[dream-skin] theme refresh failed: ${error.message}`);
+      }
+    }
+    if (applyAckToken) {
+      if (verifiedTargets > 0) {
+        await writeModeAck(options.operationAck, applyAckToken, "applied");
+      } else {
+        await writeModeAck(options.operationAck, applyAckToken, "failed");
       }
     }
     console.log(`[dream-skin] refreshed theme ${current.theme.id} (${current.timings.buildMs}ms)`);
@@ -2194,10 +2279,15 @@ async function runWatch(options) {
           if (controlOnly || pausing) {
             continue;
           }
-          const earlyApplied = await session.evaluate(
+          const reloadForStreamedVideo = current.theme.mediaKind === "video"
+            && typeof current.theme.mediaUrl === "string";
+          if (reloadForStreamedVideo) {
+            await session.send("Page.reload", { ignoreCache: true });
+          }
+          const earlyApplied = reloadForStreamedVideo ? false : await session.evaluate(
             `window.__CODEX_DREAM_SKIN_EARLY_APPLIED__ === ${JSON.stringify(current.revision)}`,
           );
-          if (!earlyApplied) {
+          if (!earlyApplied && !reloadForStreamedVideo) {
             if (controlOnly || mutationEpoch !== connectionEpoch) {
               await invalidateEarly(record);
               continue;
@@ -2216,8 +2306,13 @@ async function runWatch(options) {
             Math.min(options.timeoutMs, 8000),
             current.theme.id,
             current.revision,
+            500,
+            current.theme.mediaKind,
           );
           if (!verification?.pass) throw new Error("Initial theme verification failed");
+          if (current.theme.mediaKind === "video" && initialOperation?.status === "applying") {
+            await writeModeAck(options.operationAck, initialOperation.token, "applied");
+          }
           if (recoveryOperation && !activeOperation
             && pauseRecovery?.token === recoveryOperation.token) {
             await presentOperationUi(
@@ -2228,7 +2323,7 @@ async function runWatch(options) {
               1000,
             );
             recoveredPauseThisCycle = true;
-          } else if (!record.operationExternal) {
+          } else if (!record.operationExternal || activeOperation?.token !== record.operationToken) {
             await presentOperationUi(
               session, record.operationToken, "success", `已应用「${current.theme.name}」`,
             );
@@ -2238,6 +2333,10 @@ async function runWatch(options) {
           const recoveryStillCurrent = recoveryOperation && !activeOperation
             && pauseRecovery?.token === recoveryOperation.token;
           if (recoveryStillCurrent) recoveryFailedThisCycle = true;
+          if (current.theme.mediaKind === "video" && activeOperation?.status === "applying"
+            && record?.operationToken === activeOperation.token) {
+            await writeModeAck(options.operationAck, activeOperation.token, "failed");
+          }
           if (record?.operationToken && session && !session.closed) {
             if (recoveryStillCurrent) {
               await presentOperationUi(
