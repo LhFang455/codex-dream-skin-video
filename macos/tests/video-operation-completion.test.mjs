@@ -52,11 +52,11 @@ test("startup completes the page operation after verification", () => {
   );
 });
 
-test("the canonical Codex app root remains a trusted operation target", () => {
-  assert.match(injector, /const canonicalRoot = location\.protocol === 'app:'[\s\S]*?!location\.search/,
-    "the root page needs a stable fallback while Codex loads its shell markers");
-  assert.match(injector, /markers\.generic \|\| canonicalRoot/,
-    "the canonical root must be accepted alongside the normal shell markers");
+test("an unbranded app root cannot bypass the Codex identity markers", () => {
+  assert.doesNotMatch(injector, /markers\.generic \|\| canonicalRoot/,
+    "an app:// root without stable Codex markers must remain outside the target set");
+  assert.match(injector, /return Boolean\(main && input && branded\)/,
+    "generic fallback anchors must retain the stable Codex branding requirement");
 });
 
 test("video surfaces remain clear instead of using blur", () => {

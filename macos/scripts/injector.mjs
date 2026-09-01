@@ -522,8 +522,6 @@ async function listAppTargets(port) {
 
 async function probeSession(session) {
   return session.evaluate(`(() => {
-    const canonicalRoot = location.protocol === 'app:' &&
-      location.pathname === '/index.html' && !location.search;
     const initialRoute = new URLSearchParams(String(location.search || ''))
       .get('initialRoute') || '';
     const pathname = String(location.pathname || '');
@@ -554,7 +552,7 @@ async function probeSession(session) {
       markers,
       excludedPetSurface,
       codex: !excludedPetSurface && location.protocol === 'app:' &&
-        ((markers.shell && markers.sidebar) || settings || markers.main || markers.generic || canonicalRoot),
+        ((markers.shell && markers.sidebar) || settings || markers.main || markers.generic),
     };
   })()`);
 }
