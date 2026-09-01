@@ -23,7 +23,8 @@ case "$TASK_MODE" in auto|ambient|banner|full|off) ;; *) fail "Invalid task mode
 [ -f "$VIDEO" ] || fail "Video not found: $VIDEO"
 case "$VIDEO" in *.mp4|*.MP4) extension="mp4" ;; *.webm|*.WEBM) extension="webm" ;; *) fail "Unsupported video type: $VIDEO. Use MP4 or WebM." ;; esac
 SOURCE_BYTES="$(/usr/bin/stat -f '%z' "$VIDEO")"
-[ "$SOURCE_BYTES" -gt 0 ] && [ "$SOURCE_BYTES" -le 20971520 ] || fail "Video must be non-empty and no larger than 20 MB."
+[ "$SOURCE_BYTES" -gt 0 ] && [ "$SOURCE_BYTES" -le "$DREAM_SKIN_MAX_VIDEO_BYTES" ] \
+  || fail "Video must be non-empty and no larger than 100 MiB."
 
 ensure_state_root
 THEMES_ROOT="$STATE_ROOT/themes"

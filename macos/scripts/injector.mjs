@@ -51,6 +51,7 @@ export { SKIN_VERSION };
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
 const CDP_ID_PATTERN = /^[A-Za-z0-9._-]{1,200}$/;
 const MAX_ART_BYTES = 10 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 const MAX_SAFE_CSS_BYTES = 256 * 1024;
 const OPERATION_UI_HOST_ID = "chatgpt-dream-skin-operation";
 const OPERATION_UI_REGISTRY_KEY = "__CHATGPT_DREAM_SKIN_OPERATION_UI__";
@@ -745,8 +746,8 @@ export async function loadTheme(themeDir) {
   assertContainedPath(assetsRoot, imagePath, "Theme image");
   const imageStat = await fs.stat(imagePath);
   const extension = path.extname(theme.image).toLowerCase();
-  if (![".png", ".jpg", ".jpeg", ".webp"].includes(extension)) {
-    throw new Error(`Unsupported theme image format: ${extension || "missing"}`);
+  if (![".png", ".jpg", ".jpeg", ".webp", ".mp4", ".webm"].includes(extension)) {
+    throw new Error(`Unsupported theme media format: ${extension || "missing"}`);
   }
   let imageHandle;
   try {
@@ -757,25 +758,31 @@ export async function loadTheme(themeDir) {
   }
   try {
     const openedStat = await imageHandle.stat();
+    const maxBytes = [".mp4", ".webm"].includes(extension) ? MAX_VIDEO_BYTES : MAX_ART_BYTES;
     if (
       !imageStat.isFile()
       || !openedStat.isFile()
       || imageStat.dev !== openedStat.dev
       || imageStat.ino !== openedStat.ino
       || openedStat.size < 1
-      || openedStat.size > MAX_ART_BYTES
+      || openedStat.size > maxBytes
     ) {
-      throw new Error(`Theme image must be a stable non-empty file no larger than ${MAX_ART_BYTES} bytes`);
+      throw new Error(`Theme media must be a stable non-empty file no larger than ${maxBytes} bytes`);
     }
     const art = await imageHandle.readFile();
-    if (art.length < 1 || art.length > MAX_ART_BYTES) {
-      throw new Error(`Theme image must be a non-empty file no larger than ${MAX_ART_BYTES} bytes`);
+    if (art.length < 1 || art.length > maxBytes) {
+      throw new Error(`Theme media must be a non-empty file no larger than ${maxBytes} bytes`);
     }
     const safeCss = await loadSafeCss(assetsRoot);
     return {
       art,
       assetsRoot,
       extension,
+      mediaKind: [".mp4", ".webm"].includes(extension) ? "video" : "image",
+      mime: extension === ".mp4" ? "video/mp4"
+        : extension === ".webm" ? "video/webm"
+        : extension === ".jpg" || extension === ".jpeg" ? "image/jpeg"
+        : extension === ".webp" ? "image/webp" : "image/png",
       imagePath,
       safeCss: safeCss?.source ?? "",
       safeCssRuntime: safeCss?.runtimeSource ?? "",
@@ -807,26 +814,28 @@ function invalidateStaticPayloadAssets() {
   staticPayloadAssets = null;
 }
 
-export async function loadPayload(themeDir) {
+export async function loadPayload(themeDir, videoMediaUrl = null) {
   const startedAt = performance.now();
   const [staticAssets, loaded] = await Promise.all([
     loadStaticPayloadAssets(),
     loadTheme(themeDir),
   ]);
   const { css, template } = staticAssets;
-  const { art, extension, safeCssRuntime, safeCssStatus, theme } = loaded;
+  const { art, extension, imagePath, mediaKind, mime, safeCssRuntime, safeCssStatus, theme } = loaded;
   const combinedCss = safeCssRuntime ? `${css}\n${safeCssRuntime}\n` : css;
   const styleRevision = createHash("sha256").update(combinedCss).digest("hex").slice(0, 20);
-  const artMetadata = readImageMetadata(art, extension);
-  if (!artMetadata) {
+  const artMetadata = mediaKind === "image" ? readImageMetadata(art, extension) : null;
+  if (mediaKind === "image" && !artMetadata) {
     throw new Error("Theme image metadata is invalid or exceeds the 16384px / 50MP safety limit");
   }
   const artKey = createHash("sha256").update(art).digest("hex").slice(0, 20);
   theme.artMetadata = artMetadata;
+  theme.mediaKind = mediaKind;
   theme.artKey = artKey;
-  const mime = extension === ".jpg" || extension === ".jpeg" ? "image/jpeg"
-    : extension === ".webp" ? "image/webp" : "image/png";
-  const artDataUrl = `data:${mime};base64,${art.toString("base64")}`;
+  const streamedVideo = mediaKind === "video" && art.length > 10 * 1024 * 1024
+    && typeof videoMediaUrl === "string";
+  if (streamedVideo) theme.mediaUrl = videoMediaUrl;
+  const artDataUrl = streamedVideo ? "" : `data:${mime};base64,${art.toString("base64")}`;
   const revision = createHash("sha256")
     .update(SKIN_VERSION)
     .update(combinedCss)
@@ -848,6 +857,8 @@ export async function loadPayload(themeDir) {
   assertPayloadIntegrity(payload);
   return {
     imageBytes: art.length,
+    mediaPath: imagePath,
+    mediaMime: mime,
     payload,
     revision,
     safeCssStatus,

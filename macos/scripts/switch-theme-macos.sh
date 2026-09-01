@@ -136,8 +136,8 @@ process.stdout.write(value.contentFingerprint);
 THEME_BYTES="$(/usr/bin/stat -f '%z' "$stage/$THEME_IMAGE")"
 case "$THEME_IMAGE" in
   *.mp4|*.MP4|*.webm|*.WEBM)
-    [ "$THEME_BYTES" -gt 0 ] && [ "$THEME_BYTES" -le 20971520 ] \
-      || fail "Theme video must be non-empty and no larger than 20 MiB."
+    [ "$THEME_BYTES" -gt 0 ] && [ "$THEME_BYTES" -le "$DREAM_SKIN_MAX_VIDEO_BYTES" ] \
+      || fail "Theme video must be non-empty and no larger than 100 MiB."
     ;;
   *)
     [ "$THEME_BYTES" -gt 0 ] && [ "$THEME_BYTES" -le 10485760 ] \
