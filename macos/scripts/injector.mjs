@@ -1,7 +1,8 @@
 import fs from "node:fs/promises";
-import { constants as fsConstants, watch as watchFs } from "node:fs";
+import { constants as fsConstants, createReadStream, watch as watchFs } from "node:fs";
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
+import { createServer } from "node:http";
 import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
@@ -769,16 +770,33 @@ export async function loadTheme(themeDir) {
     ) {
       throw new Error(`Theme media must be a stable non-empty file no larger than ${maxBytes} bytes`);
     }
-    const art = await imageHandle.readFile();
-    if (art.length < 1 || art.length > maxBytes) {
+    const mediaKind = [".mp4", ".webm"].includes(extension) ? "video" : "image";
+    let art = null;
+    const artHash = createHash("sha256");
+    if (mediaKind === "video") {
+      for await (const chunk of imageHandle.createReadStream({ autoClose: false })) {
+        artHash.update(chunk);
+      }
+    } else {
+      art = await imageHandle.readFile();
+      artHash.update(art);
+    }
+    const afterReadStat = await imageHandle.stat();
+    if (!sameFileStat(openedStat, afterReadStat) || (art && art.length !== afterReadStat.size)) {
+      throw new Error("Theme media changed while being loaded");
+    }
+    if (afterReadStat.size < 1 || afterReadStat.size > maxBytes) {
       throw new Error(`Theme media must be a non-empty file no larger than ${maxBytes} bytes`);
     }
     const safeCss = await loadSafeCss(assetsRoot);
     return {
       art,
+      artKey: artHash.digest("hex").slice(0, 20),
       assetsRoot,
       extension,
-      mediaKind: [".mp4", ".webm"].includes(extension) ? "video" : "image",
+      mediaBytes: afterReadStat.size,
+      mediaKind,
+      mediaStat: afterReadStat,
       mime: extension === ".mp4" ? "video/mp4"
         : extension === ".webm" ? "video/webm"
         : extension === ".jpg" || extension === ".jpeg" ? "image/jpeg"
@@ -821,21 +839,26 @@ export async function loadPayload(themeDir, videoMediaUrl = null) {
     loadTheme(themeDir),
   ]);
   const { css, template } = staticAssets;
-  const { art, extension, imagePath, mediaKind, mime, safeCssRuntime, safeCssStatus, theme } = loaded;
+  const {
+    art, artKey, extension, imagePath, mediaBytes, mediaKind, mediaStat,
+    mime, safeCssRuntime, safeCssStatus, theme,
+  } = loaded;
   const combinedCss = safeCssRuntime ? `${css}\n${safeCssRuntime}\n` : css;
   const styleRevision = createHash("sha256").update(combinedCss).digest("hex").slice(0, 20);
   const artMetadata = mediaKind === "image" ? readImageMetadata(art, extension) : null;
   if (mediaKind === "image" && !artMetadata) {
     throw new Error("Theme image metadata is invalid or exceeds the 16384px / 50MP safety limit");
   }
-  const artKey = createHash("sha256").update(art).digest("hex").slice(0, 20);
   theme.artMetadata = artMetadata;
   theme.mediaKind = mediaKind;
   theme.artKey = artKey;
-  const streamedVideo = mediaKind === "video" && art.length > 10 * 1024 * 1024
-    && typeof videoMediaUrl === "string";
-  if (streamedVideo) theme.mediaUrl = videoMediaUrl;
-  const artDataUrl = streamedVideo ? "" : `data:${mime};base64,${art.toString("base64")}`;
+  if (mediaKind === "video") {
+    if (typeof videoMediaUrl !== "string" || !videoMediaUrl.startsWith("http://127.0.0.1:")) {
+      throw new Error("Video themes require a tokenized loopback media URL");
+    }
+    theme.mediaUrl = `${videoMediaUrl}?v=${artKey}`;
+  }
+  const artDataUrl = mediaKind === "video" ? "" : `data:${mime};base64,${art.toString("base64")}`;
   const revision = createHash("sha256")
     .update(SKIN_VERSION)
     .update(combinedCss)
@@ -856,9 +879,10 @@ export async function loadPayload(themeDir, videoMediaUrl = null) {
     .replace("__DREAM_SKIN_PAYLOAD_REVISION_JSON__", () => JSON.stringify(revision));
   assertPayloadIntegrity(payload);
   return {
-    imageBytes: art.length,
+    imageBytes: mediaBytes,
     mediaPath: imagePath,
     mediaMime: mime,
+    mediaStat,
     payload,
     revision,
     safeCssStatus,
@@ -867,6 +891,101 @@ export async function loadPayload(themeDir, videoMediaUrl = null) {
       buildMs: Number((performance.now() - startedAt).toFixed(3)),
       staticCacheHit: staticAssets.cacheHit,
     },
+  };
+}
+
+export async function createVideoMediaServer() {
+  const token = randomBytes(24).toString("hex");
+  const route = `/media/${token}`;
+  let media = null;
+  const server = createServer(async (request, response) => {
+    let requestUrl;
+    try {
+      requestUrl = new URL(request.url ?? "", "http://127.0.0.1");
+    } catch {
+      response.writeHead(404).end();
+      return;
+    }
+    if (
+      request.method !== "GET"
+      || requestUrl.pathname !== route
+      || requestUrl.searchParams.get("v") !== media?.fingerprint
+      || !media
+    ) {
+      response.writeHead(404).end();
+      return;
+    }
+    try {
+      const stat = await fs.stat(media.path);
+      if (!stat.isFile() || (media.stat && !sameFileStat(stat, media.stat))) {
+        throw new Error("Theme video is unavailable");
+      }
+      let start = 0;
+      let end = stat.size - 1;
+      let status = 200;
+      const rangeHeader = request.headers.range;
+      if (rangeHeader) {
+        const match = /^bytes=(\d*)-(\d*)$/i.exec(rangeHeader);
+        if (!match || (!match[1] && !match[2])) {
+          response.writeHead(416, { "Content-Range": `bytes */${stat.size}` }).end();
+          return;
+        }
+        if (!match[1]) {
+          const suffixLength = Number(match[2]);
+          if (!Number.isSafeInteger(suffixLength) || suffixLength < 1) {
+            response.writeHead(416, { "Content-Range": `bytes */${stat.size}` }).end();
+            return;
+          }
+          start = Math.max(0, stat.size - suffixLength);
+        } else {
+          start = Number(match[1]);
+          end = match[2] ? Number(match[2]) : end;
+        }
+        if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end)
+          || start < 0 || start > end || end >= stat.size) {
+          response.writeHead(416, { "Content-Range": `bytes */${stat.size}` }).end();
+          return;
+        }
+        status = 206;
+      }
+      response.writeHead(status, {
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "no-store",
+        "Content-Length": end - start + 1,
+        "Content-Type": media.mime,
+        "X-Content-Type-Options": "nosniff",
+        ...(status === 206 ? { "Content-Range": `bytes ${start}-${end}/${stat.size}` } : {}),
+      });
+      createReadStream(media.path, { start, end })
+        .on("error", () => response.destroy())
+        .pipe(response);
+    } catch {
+      response.writeHead(404).end();
+    }
+  });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    await new Promise((resolve) => server.close(resolve));
+    throw new Error("Could not bind the local video server");
+  }
+  return {
+    url: `http://127.0.0.1:${address.port}${route}`,
+    set: (payload) => {
+      media = payload.theme.mediaKind === "video" ? {
+        fingerprint: payload.theme.artKey,
+        mime: payload.mediaMime,
+        path: payload.mediaPath,
+        stat: payload.mediaStat,
+      } : null;
+    },
+    close: () => new Promise((resolve, reject) => server.close((error) => {
+      if (error) reject(error);
+      else resolve();
+    })),
   };
 }
 
@@ -1623,7 +1742,19 @@ async function watchOperationState(statePath, onState) {
 }
 
 async function runWatch(options) {
-  let current = await loadPayload(options.themeDir);
+  const mediaServer = await createVideoMediaServer();
+  const loadWatchPayload = async () => {
+    const payload = await loadPayload(options.themeDir, mediaServer.url);
+    mediaServer.set(payload);
+    return payload;
+  };
+  let current;
+  try {
+    current = await loadWatchPayload();
+  } catch (error) {
+    await mediaServer.close();
+    throw error;
+  }
   const sessions = new Map();
   const rejected = new Set();
   let stopping = false;
@@ -1769,7 +1900,7 @@ async function runWatch(options) {
     const refreshEpoch = mutationEpoch;
     let next;
     try {
-      next = await loadPayload(options.themeDir);
+      next = await loadWatchPayload();
     } catch (error) {
       await Promise.all([...sessions.values()].map(async (record) => {
         if (record.session.closed) return;
@@ -2150,6 +2281,7 @@ async function runWatch(options) {
         : Promise.resolve(false)));
     await Promise.all([...sessions.values()].map((record) => removeEarly(record)));
     for (const record of sessions.values()) record.session.close();
+    await mediaServer.close();
   }
 }
 
@@ -2163,23 +2295,29 @@ if (path.resolve(process.argv[1] || "") === path.resolve(scriptPath)) {
   try {
     const options = parseArgs(process.argv.slice(2));
     if (options.mode === "check") {
-      const loaded = await loadPayload(options.themeDir);
-      // loadPayload already fails closed, but every installer, importer and
-      // theme switch gates on this command, so the guard is re-asserted at the
-      // CLI boundary rather than being an internal implementation detail.
-      assertPayloadIntegrity(loaded.payload);
-      console.log(JSON.stringify({
-        pass: true,
-        version: SKIN_VERSION,
-        payloadIntegrity: "verified",
-        themeId: loaded.theme.id,
-        themeName: loaded.theme.name,
-        imageBytes: loaded.imageBytes,
-        payloadBytes: Buffer.byteLength(loaded.payload),
-        safeCssStatus: loaded.safeCssStatus,
-        artMetadata: loaded.theme.artMetadata ?? null,
-        timings: loaded.timings,
-      }, null, 2));
+      const mediaServer = await createVideoMediaServer();
+      try {
+        const loaded = await loadPayload(options.themeDir, mediaServer.url);
+        mediaServer.set(loaded);
+        // loadPayload already fails closed, but every installer, importer and
+        // theme switch gates on this command, so the guard is re-asserted at the
+        // CLI boundary rather than being an internal implementation detail.
+        assertPayloadIntegrity(loaded.payload);
+        console.log(JSON.stringify({
+          pass: true,
+          version: SKIN_VERSION,
+          payloadIntegrity: "verified",
+          themeId: loaded.theme.id,
+          themeName: loaded.theme.name,
+          imageBytes: loaded.imageBytes,
+          payloadBytes: Buffer.byteLength(loaded.payload),
+          safeCssStatus: loaded.safeCssStatus,
+          artMetadata: loaded.theme.artMetadata ?? null,
+          timings: loaded.timings,
+        }, null, 2));
+      } finally {
+        await mediaServer.close();
+      }
     } else if (options.mode === "begin-operation") {
       await runBeginOperation(options);
       await new Promise((resolve) => process.stdout.write("", resolve));

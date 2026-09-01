@@ -6,7 +6,7 @@ import test from "node:test";
 
 import { loadPayload } from "../scripts/injector.mjs";
 
-test("small video payload stays embedded for Codex URL-safety compatibility", async (t) => {
+test("small video payload streams without entering the injected JavaScript", async (t) => {
   const themeDir = await mkdtemp(path.join(os.tmpdir(), "dream-skin-streamed-video-"));
   t.after(() => rm(themeDir, { recursive: true, force: true }));
   await writeFile(path.join(themeDir, "theme.json"), JSON.stringify({
@@ -17,8 +17,12 @@ test("small video payload stays embedded for Codex URL-safety compatibility", as
   ]));
 
   const loaded = await loadPayload(themeDir, "http://127.0.0.1:32100/media/test-token");
-  assert.match(loaded.payload, /data:video\/mp4;base64/);
-  assert.doesNotMatch(loaded.payload, /http:\/\/127\.0\.0\.1:32100\/media\/test-token/);
+  assert.doesNotMatch(loaded.payload, /data:video\/mp4;base64/);
+  assert.match(
+    loaded.payload,
+    /http:\/\/127\.0\.0\.1:32100\/media\/test-token\?v=[0-9a-f]{20}/,
+  );
+  assert.ok(Buffer.byteLength(loaded.payload) < 4 * 1024 * 1024);
 });
 
 test("medium video payload streams instead of inflating the injected payload", async (t) => {
@@ -30,6 +34,10 @@ test("medium video payload streams instead of inflating the injected payload", a
   await writeFile(path.join(themeDir, "background.mp4"), Buffer.alloc(11 * 1024 * 1024, 0));
 
   const loaded = await loadPayload(themeDir, "http://127.0.0.1:32100/media/medium-token");
-  assert.match(loaded.payload, /http:\/\/127\.0\.0\.1:32100\/media\/medium-token/);
+  assert.match(
+    loaded.payload,
+    /http:\/\/127\.0\.0\.1:32100\/media\/medium-token\?v=[0-9a-f]{20}/,
+  );
   assert.doesNotMatch(loaded.payload, /data:video\/mp4;base64/);
+  assert.ok(Buffer.byteLength(loaded.payload) < 4 * 1024 * 1024);
 });
