@@ -1,7 +1,29 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import vm from "node:vm";
+
+const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+test("canonical runtime retains the video renderer contract", async () => {
+  const runtimeRenderer = await fs.readFile(
+    path.join(projectRoot, "runtime", "renderer-inject.js"), "utf8",
+  );
+  const runtimeCss = await fs.readFile(
+    path.join(projectRoot, "runtime", "dream-skin.css"), "utf8",
+  );
+
+  assert.match(runtimeRenderer, /const MEDIA_KIND = THEME\.mediaKind === "video"/);
+  assert.match(runtimeRenderer, /videoNode\.src = THEME\.mediaUrl/);
+  assert.match(runtimeRenderer, /const analyzeVideoPalette = \(\) => new Promise/);
+  assert.match(runtimeCss, /data-dream-media-kind="video"/);
+  assert.match(
+    runtimeCss,
+    /main\[class\*="_MainContentSurface_"\][\s\S]*?\/ \.24/,
+  );
+});
 
 function styleDeclaration() {
   const values = new Map();
