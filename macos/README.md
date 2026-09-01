@@ -21,7 +21,7 @@ This project injects through **local loopback CDP**. It does **not** modify the 
 
 ## Release install (recommended)
 
-普通用户请从 [GitHub Releases](https://github.com/Fei-Away/Codex-Dream-Skin/releases) 下载
+普通用户请从 [GitHub Releases](https://github.com/2698685648/codex-dream-skin-video/releases) 下载
 `CodexDreamSkin-vX.Y.Z.dmg`，按 [`docs/install-macos.md`](../docs/install-macos.md) 的图形界面步骤
 拖入 Applications。首次运行可能需要在“系统设置 → 隐私与安全性 → 仍要打开”确认一次；不需要
 运行 `xattr` 或安装源码。后续更新下载新的 DMG 覆盖安装即可，用户主题和图片会保留。
@@ -82,7 +82,7 @@ CSS/images.
 2. Start Codex via user `launchd` with CDP bound to `127.0.0.1` only.
 3. Accept the debug port only when it belongs to Codex (or a legitimate child).
 4. Inject only into expected `app://` renderer targets.
-5. Resolve the selected theme and image to real paths, then enforce 20 MiB for video themes,
+5. Resolve the selected theme and media to real paths, then enforce 100 MiB for video themes,
    `16384px`-per-side, and 50-megapixel limits before injection.
 6. Keep a small injector alive across reloads and route changes.
 7. Pause/Restore stops the injector only when PID, executable, script path, and
@@ -157,33 +157,29 @@ manual placement bypasses archive checks, so use trusted content only.
 
 ## Video backgrounds: current compatibility limit
 
-Video themes are a macOS source-build feature. Use **MP4 (H.264) or WebM**, muted and
-looping. The importer accepts a video no larger than **20 MiB** and uses an embedded
-payload at or below **10 MiB**; a 10–20 MiB video is served from a tokenized local
-loopback URL instead.
+Video themes are supported on macOS. Use a local **MP4 or WebM** file, muted and looping.
+The importer accepts at most **100 MiB (104,857,600 bytes)** and does not recompress the
+source. A file of 104,857,601 bytes is rejected before it can replace the active theme.
 
-That 20 MiB importer limit is **not** a guaranteed playback limit. On the currently
-tested ChatGPT/Codex desktop runtime, a 17.7 MiB, 1920×1080, 60 fps H.264 test video
-reached the local server but failed during dynamic application with
-`MEDIA_ELEMENT_ERROR: Media load rejected by URL safety check`. The symptom can be a
-gray/empty background or an operation that does not complete.
+Every video, including small files, is served in byte ranges from a random, tokenized
+`127.0.0.1` URL. Video bytes are never expanded into the injected JavaScript payload.
+The URL also carries the media SHA-256 fingerprint, disables caching, and becomes invalid
+when the selected media changes. During a menu-bar switch the existing watcher and server
+stay alive; the page reloads once, then success is reported only after two decoded samples
+show that playback time is advancing.
 
-- **Stable recommendation:** keep each video at or below **10 MiB** (10,485,760 bytes).
-- **10–20 MiB:** experimental only; import may succeed but playback or hot switching can
-  be rejected by the desktop runtime. Do not rely on it for a distributable theme.
-- **Over 20 MiB:** rejected by this implementation before injection.
-- If the desktop runtime changes, retest with an 11 MiB sample before raising the stable
-  recommendation. Resolution and frame rate do not bypass the byte-limit behavior.
-
-This limit belongs to the current desktop runtime's URL/media policy, not to the video
-codec alone. It is recorded here so contributors do not mistake the 20 MiB validation
-cap for verified compatibility.
+The 100 MiB value is an input-size limit, not a promise that every codec/profile will play.
+Playback still depends on the media formats supported by the installed ChatGPT/Codex
+runtime. If a file cannot decode, has zero video dimensions, pauses, or does not advance,
+the switch is marked failed and the existing restart fallback remains available. For broad
+compatibility, MP4 with H.264 video is the preferred starting point; keep an original copy
+because this app deliberately performs no quality-changing conversion.
 
 ## Image and video guidelines
 
 - PNG / JPEG / HEIC / TIFF / WebP (macOS readable)
 - Images: source ≤ 50 MB, prepared image ≤ 10 MiB, dimensions ≤ 16384 px per side and ≤ 50 MP
-- Videos: see the compatibility limit above; target ≤ 10 MiB for reliable use
+- Videos: MP4 / WebM, ≤ 100 MiB exactly; no automatic recompression
 - `2560 × 1440` (16:9) is the recommended master size; width ≥ 2000 px minimum
 - Keep roughly the left 50%–58% calm and low-contrast for native home content;
   place the subject in the right 58%–88% without touching the edge

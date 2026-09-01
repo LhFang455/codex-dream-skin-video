@@ -101,7 +101,7 @@ UPDATE_JSON="$({
   const value = JSON.parse(process.argv[1]);
   if (value.currentVersion !== "v1.5.16" || value.latestVersion !== "v9.8.7") process.exit(1);
   if (!value.updateAvailable) process.exit(1);
-  if (value.releaseUrl !== "https://github.com/Fei-Away/Codex-Dream-Skin/releases/latest") process.exit(1);
+  if (value.releaseUrl !== "https://github.com/2698685648/codex-dream-skin-video/releases/latest") process.exit(1);
 ' "$UPDATE_JSON"
 if /usr/bin/grep -R -n -E --exclude-dir='.build' \
   --exclude-dir='.build-*' \
@@ -188,6 +188,14 @@ fi
 "$NODE" "$ROOT/tests/image-metadata.test.mjs"
 "$NODE" "$ROOT/tests/injector-bootstrap.test.mjs"
 "$NODE" "$ROOT/tests/window-readiness.test.mjs"
+"$NODE" "$ROOT/tests/renderer-verification.test.mjs"
+"$NODE" "$ROOT/tests/video-size-contract.test.mjs"
+"$NODE" "$ROOT/tests/switch-video-limit.test.mjs"
+"$NODE" "$ROOT/tests/video-stream-payload.test.mjs"
+"$NODE" "$ROOT/tests/video-media-server.test.mjs"
+"$NODE" "$ROOT/tests/video-hot-switch.test.mjs"
+"$NODE" "$ROOT/tests/video-operation-completion.test.mjs"
+"$NODE" "$ROOT/tests/update-version-source.test.mjs"
 "$NODE" "$ROOT/tests/renderer-inject.test.mjs"
 "$NODE" "$ROOT/tests/safe-css-validator.test.mjs"
 "$NODE" "$ROOT/tests/theme-stage.test.mjs"

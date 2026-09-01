@@ -52,7 +52,7 @@ Passion8 为本项目用户准备了专属福利：通过<a href="https://passio
 ## 直接安装
 
 普通用户只需先安装并退出一次官方 Codex / ChatGPT，然后从
-[GitHub Releases](https://github.com/Fei-Away/Codex-Dream-Skin/releases) 下载：
+[GitHub Releases](https://github.com/2698685648/codex-dream-skin-video/releases) 下载：
 
 - macOS：打开 `CodexDreamSkin-vX.Y.Z.dmg`，把 App 拖进 Applications。
 - Windows：双击 `CodexDreamSkin-Setup-vX.Y.Z.exe`，按安装向导完成。
@@ -162,7 +162,7 @@ macOS 菜单栏和 Windows 托盘都有「主题库 Gallery」和「在线 Studi
 - **真·可交互**：侧栏、建议卡、项目选择、输入框都是原生控件，不是整窗假截图贴上去
 - **真背景层**：一张 16:9 纯壁纸连续铺满整窗，首页突出氛围，任务页自动降低干扰
 - **可换图**：换一张喜欢的纯背景，自适应焦点、安全区和配色后变成你的主题
-- **视频背景（macOS 源码功能）**：支持 MP4 / WebM；当前桌面端实测可靠上限为 **10 MiB**。10–20 MiB 虽可导入但可能被运行时 URL 安全策略拒绝，详见 [视频兼容性说明](./macos/README.md#video-backgrounds-current-compatibility-limit)
+- **视频背景（macOS）**：支持不超过 **100 MiB（104,857,600 字节）**的本地 MP4 / WebM，不重新压缩；所有视频均通过带随机令牌和内容指纹的本机回环地址分段读取，热切换只在确认视频实际播放后报告成功。详见[视频兼容性说明](./macos/README.md#video-backgrounds-current-compatibility-limit)
 - **可存主题**：macOS 菜单栏与 Windows 系统托盘都能保存/切换本地主题
 - **一键换肤**：在 [DreamSkin.cc](https://dreamskin.cc) 上点一下，客户端核对来源与校验和后直接装上
 - **可导入主题包**：两端都可直接选择普通 `.zip`，安全校验后加入本地主题库
@@ -174,7 +174,7 @@ macOS 菜单栏和 Windows 托盘都有「主题库 Gallery」和「在线 Studi
 ### 普通用户：下载安装包
 
 不需要 clone 仓库，也不需要安装 Node.js 或运行 `.sh` / `.ps1`。从
-[GitHub Releases](https://github.com/Fei-Away/Codex-Dream-Skin/releases) 下载对应平台的最新安装包，
+[GitHub Releases](https://github.com/2698685648/codex-dream-skin-video/releases) 下载对应平台的最新安装包，
 按平台文档完成一次图形界面安装：
 
 | 平台 | 下载 | 安装说明 |
