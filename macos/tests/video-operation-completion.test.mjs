@@ -26,7 +26,7 @@ test("video hot apply keeps a healthy watcher and waits for playback evidence", 
   );
 });
 
-test("video hot apply stages a watcher refresh without rotating its server", () => {
+test("video hot apply stages a refresh without replacing the healthy watcher", () => {
   const videoBranch = common.match(/case "\$theme_media" in([\s\S]*?)\n  esac/);
   assert.ok(videoBranch, "hot apply must have a video-media branch");
   assert.match(
@@ -36,12 +36,13 @@ test("video hot apply stages a watcher refresh without rotating its server", () 
   );
 });
 
-test("the watcher reloads a loaded page before installing a streamed video URL", () => {
+test("the watcher transfers a Blob into a loaded page without navigation", () => {
   assert.match(
     injector,
-    /current\.theme\.mediaKind === "video"[\s\S]*?Page\.reload/,
-    "a hot video URL must be installed during document initialization, not assigned into an already-loaded page",
+    /current\.theme\.mediaKind === "video"[\s\S]*?applyLoadedTheme\(session, current\)/,
+    "a video theme must install a CSP-compatible Blob into the current document",
   );
+  assert.doesNotMatch(injector, /reloadForStreamedVideo/);
 });
 
 test("startup completes the page operation after verification", () => {

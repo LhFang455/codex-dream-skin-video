@@ -161,12 +161,14 @@ Video themes are supported on macOS. Use a local **MP4 or WebM** file, muted and
 The importer accepts at most **100 MiB (104,857,600 bytes)** and does not recompress the
 source. A file of 104,857,601 bytes is rejected before it can replace the active theme.
 
-Every video, including small files, is served in byte ranges from a random, tokenized
-`127.0.0.1` URL. Video bytes are never expanded into the injected JavaScript payload.
-The URL also carries the media SHA-256 fingerprint, disables caching, and becomes invalid
-when the selected media changes. During a menu-bar switch the existing watcher and server
-stay alive; the page reloads once, then success is reported only after two decoded samples
-show that playback time is advancing.
+Every video, including small files, stays outside the injected JavaScript payload. The
+injector reads it in bounded 1 MiB chunks over the existing local CDP session, assembles a
+renderer-side Blob, and gives the video element a `blob:` URL allowed by current Codex CSP.
+During a menu-bar switch the existing watcher stays alive and the page does not reload;
+success is reported only after two decoded samples show that playback time is advancing.
+Switching to another theme or pausing the skin revokes the previous Blob URL. This approach
+keeps transfer messages bounded but can temporarily use roughly the video size again in
+renderer memory, so 100 MiB remains a deliberate ceiling rather than an unlimited setting.
 
 The 100 MiB value is an input-size limit, not a promise that every codec/profile will play.
 Playback still depends on the media formats supported by the installed ChatGPT/Codex

@@ -842,7 +842,7 @@ function invalidateStaticPayloadAssets() {
   staticPayloadAssets = null;
 }
 
-export async function loadPayload(themeDir, videoMediaUrl = null) {
+export async function loadPayload(themeDir) {
   const startedAt = performance.now();
   const [staticAssets, loaded] = await Promise.all([
     loadStaticPayloadAssets(),
@@ -862,20 +862,12 @@ export async function loadPayload(themeDir, videoMediaUrl = null) {
   theme.artMetadata = artMetadata;
   theme.mediaKind = mediaKind;
   theme.artKey = artKey;
-  if (mediaKind === "video") {
-    if (typeof videoMediaUrl !== "string" || !videoMediaUrl.startsWith("http://127.0.0.1:")) {
-      throw new Error("Video themes require a tokenized loopback media URL");
-    }
-    theme.mediaUrl = `${videoMediaUrl}?v=${artKey}`;
-  }
   const artDataUrl = mediaKind === "video" ? "" : `data:${mime};base64,${art.toString("base64")}`;
-  const revisionTheme = { ...theme };
-  delete revisionTheme.mediaUrl;
   const revision = createHash("sha256")
     .update(SKIN_VERSION)
     .update(combinedCss)
     .update(template)
-    .update(JSON.stringify(revisionTheme))
+    .update(JSON.stringify(theme))
     .digest("hex")
     .slice(0, 20);
   // Every replacement value must be supplied as a function. A plain string
@@ -904,6 +896,131 @@ export async function loadPayload(themeDir, videoMediaUrl = null) {
       staticCacheHit: staticAssets.cacheHit,
     },
   };
+}
+
+const VIDEO_MEDIA_KEY = "__CODEX_DREAM_SKIN_VIDEO_MEDIA__";
+const VIDEO_TRANSFER_KEY = "__CODEX_DREAM_SKIN_VIDEO_TRANSFER__";
+const DEFAULT_VIDEO_CHUNK_BYTES = 1024 * 1024;
+
+export async function clearTransferredVideo(session) {
+  return session.evaluate(`(() => {
+    const mediaKey = ${JSON.stringify(VIDEO_MEDIA_KEY)};
+    const transferKey = ${JSON.stringify(VIDEO_TRANSFER_KEY)};
+    const media = window[mediaKey];
+    if (typeof media?.url === "string") {
+      try { URL.revokeObjectURL(media.url); } catch {}
+    }
+    delete window[mediaKey];
+    delete window[transferKey];
+    return true;
+  })()`);
+}
+
+export async function transferVideoBlob(
+  session,
+  loaded,
+  { chunkBytes = DEFAULT_VIDEO_CHUNK_BYTES } = {},
+) {
+  if (loaded?.theme?.mediaKind !== "video") {
+    throw new Error("Blob transfer requires a validated video theme");
+  }
+  if (!Number.isSafeInteger(chunkBytes) || chunkBytes < 64 || chunkBytes > 2 * 1024 * 1024) {
+    throw new Error("Video transfer chunk size is outside the safe range");
+  }
+  const expectedStat = loaded.mediaStat;
+  const expectedBytes = Number(expectedStat?.size);
+  if (!Number.isSafeInteger(expectedBytes) || expectedBytes < 1 || expectedBytes > MAX_VIDEO_BYTES) {
+    throw new Error("Video transfer requires a stable validated file size");
+  }
+  let handle;
+  try {
+    handle = await fs.open(
+      loaded.mediaPath,
+      fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0),
+    );
+    const openedStat = await handle.stat();
+    if (!openedStat.isFile() || !sameFileStat(openedStat, expectedStat)) {
+      throw new Error("Theme video changed after validation");
+    }
+    const key = loaded.theme.artKey;
+    const mime = loaded.mediaMime;
+    await session.evaluate(`(() => {
+      window[${JSON.stringify(VIDEO_TRANSFER_KEY)}] = {
+        key: ${JSON.stringify(key)},
+        mime: ${JSON.stringify(mime)},
+        totalBytes: ${expectedBytes},
+        chunks: [],
+        received: 0,
+      };
+      return true;
+    })()`);
+
+    let offset = 0;
+    let chunks = 0;
+    while (offset < expectedBytes) {
+      const length = Math.min(chunkBytes, expectedBytes - offset);
+      const buffer = Buffer.allocUnsafe(length);
+      const { bytesRead } = await handle.read(buffer, 0, length, offset);
+      if (bytesRead !== length) throw new Error("Theme video changed while being transferred");
+      const base64 = buffer.toString("base64", 0, bytesRead);
+      const received = await session.evaluate(`(() => {
+        const transfer = window[${JSON.stringify(VIDEO_TRANSFER_KEY)}];
+        if (!transfer || transfer.key !== ${JSON.stringify(key)}) {
+          throw new Error("Video transfer state was replaced");
+        }
+        const binary = atob(${JSON.stringify(base64)});
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index += 1) {
+          bytes[index] = binary.charCodeAt(index);
+        }
+        transfer.chunks.push(bytes);
+        transfer.received += bytes.byteLength;
+        return transfer.received;
+      })()`, 20000);
+      offset += bytesRead;
+      chunks += 1;
+      if (received !== offset) throw new Error("Renderer video transfer byte count did not match");
+    }
+
+    const afterStat = await handle.stat();
+    if (!sameFileStat(afterStat, expectedStat)) {
+      throw new Error("Theme video changed while being transferred");
+    }
+    const result = await session.evaluate(`(() => {
+      const mediaKey = ${JSON.stringify(VIDEO_MEDIA_KEY)};
+      const transferKey = ${JSON.stringify(VIDEO_TRANSFER_KEY)};
+      const transfer = window[transferKey];
+      if (!transfer || transfer.key !== ${JSON.stringify(key)}
+        || transfer.received !== transfer.totalBytes) {
+        throw new Error("Video transfer did not complete");
+      }
+      const blob = new Blob(transfer.chunks, { type: transfer.mime });
+      if (blob.size !== transfer.totalBytes) throw new Error("Video Blob size did not match");
+      const url = URL.createObjectURL(blob);
+      const previous = window[mediaKey];
+      window[mediaKey] = {
+        key: transfer.key,
+        mime: transfer.mime,
+        size: blob.size,
+        blob,
+        url,
+      };
+      delete window[transferKey];
+      if (typeof previous?.url === "string" && previous.url !== url) {
+        try { URL.revokeObjectURL(previous.url); } catch {}
+      }
+      return { key: transfer.key, size: blob.size, url };
+    })()`, 20000);
+    return { ...result, chunks };
+  } catch (error) {
+    await session.evaluate(`(() => {
+      delete window[${JSON.stringify(VIDEO_TRANSFER_KEY)}];
+      return true;
+    })()`).catch(() => {});
+    throw error;
+  } finally {
+    await handle?.close();
+  }
 }
 
 export async function createVideoMediaServer() {
@@ -1024,6 +1141,16 @@ export function assertPayloadIntegrity(payload) {
 
 async function applyToSession(session, payload) {
   return session.evaluate(payload);
+}
+
+async function applyLoadedTheme(session, loaded) {
+  if (loaded.theme.mediaKind === "video") {
+    await transferVideoBlob(session, loaded);
+    return applyToSession(session, loaded.payload);
+  }
+  const result = await applyToSession(session, loaded.payload);
+  await clearTransferredVideo(session);
+  return result;
 }
 
 function nextOperationToken() {
@@ -1192,9 +1319,7 @@ async function removeFromSession(session) {
   return session.evaluate(`(() => {
     window.__CODEX_DREAM_SKIN_DISABLED__ = true;
     const state = window.__CODEX_DREAM_SKIN_STATE__;
-    let cleaned = false;
-    try { cleaned = Boolean(state?.cleanup && state.cleanup()); } catch {}
-    if (cleaned) return true;
+    try { state?.cleanup?.(); } catch {}
     const root = document.documentElement;
     for (const attribute of [...(root?.attributes || [])]) {
       if (attribute.name.startsWith('data-dream-')) root.removeAttribute(attribute.name);
@@ -1214,6 +1339,10 @@ async function removeFromSession(session) {
     }
     delete window.__CODEX_DREAM_SKIN_STYLE_SHEETS__;
     try { if (state?.artUrl) URL.revokeObjectURL(state.artUrl); } catch {}
+    const videoMedia = window[${JSON.stringify(VIDEO_MEDIA_KEY)}];
+    try { if (videoMedia?.url) URL.revokeObjectURL(videoMedia.url); } catch {}
+    delete window[${JSON.stringify(VIDEO_MEDIA_KEY)}];
+    delete window[${JSON.stringify(VIDEO_TRANSFER_KEY)}];
     document.getElementById('codex-dream-skin-style')?.remove();
     delete window.__CODEX_DREAM_SKIN_STATE__;
     return true;
@@ -1233,7 +1362,9 @@ async function verifyRemovedSession(session) {
       [...document.adoptedStyleSheets].some((sheet) => sheets.has(sheet)));
     return !hasAttributes && !hasVariables && !hasParts && !hasSheets &&
       !document.getElementById('codex-dream-skin-style') &&
-      !window.__CODEX_DREAM_SKIN_STATE__;
+      !window.__CODEX_DREAM_SKIN_STATE__ &&
+      !window[${JSON.stringify(VIDEO_MEDIA_KEY)}] &&
+      !window[${JSON.stringify(VIDEO_TRANSFER_KEY)}];
   })()`);
 }
 
@@ -1516,7 +1647,6 @@ async function runFinishOperation(options) {
 async function runOneShot(options) {
   const connected = await connectCodexTargets(options.port, options.timeoutMs);
   const needsPayload = options.mode === "once" || options.mode === "verify" || options.reload;
-  const mediaServer = needsPayload ? await createVideoMediaServer() : null;
   const operationToken = options.mode === "once" || options.mode === "remove"
     ? options.operationToken ?? nextOperationToken()
     : null;
@@ -1530,8 +1660,7 @@ async function runOneShot(options) {
   }
   let loaded = null;
   try {
-    loaded = needsPayload ? await loadPayload(options.themeDir, mediaServer.url) : null;
-    if (loaded) mediaServer.set(loaded);
+    loaded = needsPayload ? await loadPayload(options.themeDir) : null;
   } catch (error) {
     if (operationToken) {
       await Promise.all(connected.map(({ session }) => presentOperationUi(
@@ -1539,10 +1668,8 @@ async function runOneShot(options) {
       )));
     }
     for (const { session } of connected) session.close();
-    await mediaServer?.close();
     throw error;
   }
-  const payload = loaded?.payload ?? null;
   const results = [];
   let screenshotCaptured = false;
 
@@ -1553,7 +1680,7 @@ async function runOneShot(options) {
         await bestEffortOperationUi(
           session, "update", operationToken, "loading", `正在应用「${loaded.theme.name}」…`,
         );
-        await applyToSession(session, payload);
+        await applyLoadedTheme(session, loaded);
       }
 
       if (options.reload) {
@@ -1565,7 +1692,7 @@ async function runOneShot(options) {
               session, operationToken, "loading", `正在应用「${loaded.theme.name}」…`,
             );
           }
-          await applyToSession(session, payload);
+          await applyLoadedTheme(session, loaded);
         }
       }
 
@@ -1630,7 +1757,6 @@ async function runOneShot(options) {
   console.log(JSON.stringify({ mode: options.mode, version: SKIN_VERSION, port: options.port, targets: results }, null, 2));
   const failed = results.length === 0 || results.some((item) =>
     item.error || (options.mode === "remove" ? item.result !== true : !item.result?.pass));
-  await mediaServer?.close();
   if (failed) process.exitCode = 2;
 }
 
@@ -1805,17 +1931,11 @@ async function watchOperationState(statePath, onState) {
 }
 
 async function runWatch(options) {
-  const mediaServer = await createVideoMediaServer();
-  const loadWatchPayload = async () => {
-    const payload = await loadPayload(options.themeDir, mediaServer.url);
-    mediaServer.set(payload);
-    return payload;
-  };
+  const loadWatchPayload = () => loadPayload(options.themeDir);
   let current;
   try {
     current = await loadWatchPayload();
   } catch (error) {
-    await mediaServer.close();
     throw error;
   }
   const sessions = new Map();
@@ -2004,23 +2124,27 @@ async function runWatch(options) {
           session, operationToken, "loading", `正在应用「${current.theme.name}」…`,
         );
         if (controlOnly || mutationEpoch !== refreshEpoch) continue;
-        const nextIdentifier = await registerEarlyForRecord(
-          record, current.payload, current.revision,
-        );
-        if (controlOnly || mutationEpoch !== refreshEpoch) {
-          await removeEarlyIdentifier(record, nextIdentifier);
-          continue;
-        }
-        if (record.earlyScriptId) {
-          await removeEarlyIdentifier(record, record.earlyScriptId);
-        }
-        record.earlyScriptId = nextIdentifier;
-        record.needsLoadFallback = !nextIdentifier;
         if (current.theme.mediaKind === "video") {
-          await session.send("Page.reload", { ignoreCache: true });
+          if (record.earlyScriptId) {
+            await removeEarlyIdentifier(record, record.earlyScriptId);
+          }
+          record.earlyScriptId = null;
+          record.needsLoadFallback = true;
         } else {
-          await applyToSession(session, current.payload);
+          const nextIdentifier = await registerEarlyForRecord(
+            record, current.payload, current.revision,
+          );
+          if (controlOnly || mutationEpoch !== refreshEpoch) {
+            await removeEarlyIdentifier(record, nextIdentifier);
+            continue;
+          }
+          if (record.earlyScriptId) {
+            await removeEarlyIdentifier(record, record.earlyScriptId);
+          }
+          record.earlyScriptId = nextIdentifier;
+          record.needsLoadFallback = !nextIdentifier;
         }
+        await applyLoadedTheme(session, current);
         if (controlOnly || mutationEpoch !== refreshEpoch) continue;
         const verification = await waitForVerifiedSession(
           session,
@@ -2217,7 +2341,7 @@ async function runWatch(options) {
             setTimeout(() => {
               if (session.closed || controlOnly || mutationEpoch !== fallbackEpoch
                 || !record.needsLoadFallback) return;
-              applyToSession(session, current.payload).catch((error) => {
+              applyLoadedTheme(session, current).catch((error) => {
                 console.error(`[dream-skin] fallback reinject failed: ${error.message}`);
               });
             }, 0);
@@ -2225,7 +2349,7 @@ async function runWatch(options) {
           const initialOperation = activeOperation;
           recoveryOperation = initialOperation ? null : cycleRecovery;
           const pausing = initialOperation?.status === "pausing";
-          if (!controlOnly) {
+          if (!controlOnly && current.theme.mediaKind !== "video") {
             try {
               record.earlyScriptId = await registerEarlyForRecord(
                 record, current.payload, current.revision,
@@ -2236,6 +2360,8 @@ async function runWatch(options) {
               record.needsLoadFallback = true;
               console.error(`[dream-skin] early injection unavailable: ${error.message}`);
             }
+          } else if (!controlOnly) {
+            record.needsLoadFallback = true;
           }
           const probe = await waitForCodexProbe(session);
           if (!probe?.codex) {
@@ -2277,15 +2403,12 @@ async function runWatch(options) {
           if (controlOnly || pausing) {
             continue;
           }
-          const reloadForStreamedVideo = current.theme.mediaKind === "video"
-            && typeof current.theme.mediaUrl === "string";
-          if (reloadForStreamedVideo) {
-            await session.send("Page.reload", { ignoreCache: true });
-          }
-          const earlyApplied = reloadForStreamedVideo ? false : await session.evaluate(
+          const earlyApplied = current.theme.mediaKind === "video" ? false : await session.evaluate(
             `window.__CODEX_DREAM_SKIN_EARLY_APPLIED__ === ${JSON.stringify(current.revision)}`,
           );
-          if (!earlyApplied && !reloadForStreamedVideo) {
+          if (current.theme.mediaKind === "video") {
+            await applyLoadedTheme(session, current);
+          } else if (!earlyApplied) {
             if (controlOnly || mutationEpoch !== connectionEpoch) {
               await invalidateEarly(record);
               continue;
@@ -2293,7 +2416,7 @@ async function runWatch(options) {
             await session.evaluate(
               `window.__CODEX_DREAM_SKIN_EARLY_GENERATION__ = ${JSON.stringify(`fallback:${current.revision}`)}`,
             );
-            await applyToSession(session, current.payload);
+            await applyLoadedTheme(session, current);
           }
           if (controlOnly || mutationEpoch !== connectionEpoch) {
             await invalidateEarly(record);
@@ -2378,7 +2501,6 @@ async function runWatch(options) {
         : Promise.resolve(false)));
     await Promise.all([...sessions.values()].map((record) => removeEarly(record)));
     for (const record of sessions.values()) record.session.close();
-    await mediaServer.close();
   }
 }
 
@@ -2392,29 +2514,23 @@ if (path.resolve(process.argv[1] || "") === path.resolve(scriptPath)) {
   try {
     const options = parseArgs(process.argv.slice(2));
     if (options.mode === "check") {
-      const mediaServer = await createVideoMediaServer();
-      try {
-        const loaded = await loadPayload(options.themeDir, mediaServer.url);
-        mediaServer.set(loaded);
-        // loadPayload already fails closed, but every installer, importer and
-        // theme switch gates on this command, so the guard is re-asserted at the
-        // CLI boundary rather than being an internal implementation detail.
-        assertPayloadIntegrity(loaded.payload);
-        console.log(JSON.stringify({
-          pass: true,
-          version: SKIN_VERSION,
-          payloadIntegrity: "verified",
-          themeId: loaded.theme.id,
-          themeName: loaded.theme.name,
-          imageBytes: loaded.imageBytes,
-          payloadBytes: Buffer.byteLength(loaded.payload),
-          safeCssStatus: loaded.safeCssStatus,
-          artMetadata: loaded.theme.artMetadata ?? null,
-          timings: loaded.timings,
-        }, null, 2));
-      } finally {
-        await mediaServer.close();
-      }
+      const loaded = await loadPayload(options.themeDir);
+      // loadPayload already fails closed, but every installer, importer and
+      // theme switch gates on this command, so the guard is re-asserted at the
+      // CLI boundary rather than being an internal implementation detail.
+      assertPayloadIntegrity(loaded.payload);
+      console.log(JSON.stringify({
+        pass: true,
+        version: SKIN_VERSION,
+        payloadIntegrity: "verified",
+        themeId: loaded.theme.id,
+        themeName: loaded.theme.name,
+        imageBytes: loaded.imageBytes,
+        payloadBytes: Buffer.byteLength(loaded.payload),
+        safeCssStatus: loaded.safeCssStatus,
+        artMetadata: loaded.theme.artMetadata ?? null,
+        timings: loaded.timings,
+      }, null, 2));
     } else if (options.mode === "begin-operation") {
       await runBeginOperation(options);
       await new Promise((resolve) => process.stdout.write("", resolve));

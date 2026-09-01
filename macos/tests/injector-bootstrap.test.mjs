@@ -217,9 +217,11 @@ assert.match(
 );
 assert.match(
   source,
-  /const earlyApplied = reloadForStreamedVideo \? false : await session\.evaluate\([\s\S]*if \(!earlyApplied && !reloadForStreamedVideo\) \{[\s\S]*applyToSession/,
-  "The watcher must not run the full payload twice after an image early install or assign a streamed video URL into the old document.",
+  /const earlyApplied = current\.theme\.mediaKind === "video" \? false : await session\.evaluate\([\s\S]*if \(current\.theme\.mediaKind === "video"\) \{[\s\S]*applyLoadedTheme\(session, current\)[\s\S]*else if \(!earlyApplied\)/,
+  "The watcher must not run the full payload twice after an image early install, while video uses the Blob-aware apply path.",
 );
+assert.doesNotMatch(source, /reloadForStreamedVideo/,
+  "Blob-backed video switching must not depend on a page reload.");
 assert.match(
   source,
   /const suggestionLabelColorsMatch = visibleSuggestionLabels\.every\(/,

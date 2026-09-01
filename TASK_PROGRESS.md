@@ -1,5 +1,36 @@
 # Task Progress
 
+## Codex 26.825 video CSP compatibility (2026-09-01)
+
+- [objective] Restore small and large local video themes after Codex 26.825
+  began rejecting the tokenized loopback media URL. Preserve the 100 MiB
+  input boundary and do not modify the signed ChatGPT app.
+- [field evidence] The visible `app://-/index.html` renderer reports CSP
+  `media-src 'self' app: blob: data:`. The active Dream Skin video points to
+  `http://127.0.0.1:<random>/media/<token>`, remains at readyState 0, and has
+  media error code 4. Both the small and 80 MB themes therefore fail the same
+  initial playback verification; file size is not the failing boundary.
+- [reference] DSH Desktop skin-center keeps large videos out of the page
+  payload and serves them through a tokenized Range-capable same-origin route.
+  Codex does not expose a supported route extension point.
+- [disproved] A temporary `Page.setBypassCSP` prototype passed unit tests but
+  the live Codex 26.825 renderer still rejected the loopback video with media
+  error code 4. That prototype was not installed and has been removed.
+- [implemented] The macOS injector now transfers validated video files through
+  the existing CDP session in 1 MiB chunks, assembles a renderer-side Blob, and
+  revokes it on replacement or pause. Image themes retain their previous path;
+  the shared renderer keeps the existing Windows `mediaUrl` fallback.
+- [verified] Focused macOS/runtime regressions and the complete macOS suite pass.
+  The actual 79,212,726-byte Odette Pro HQ file transferred in 76 chunks,
+  reproduced the exact SHA-256, kept the injected payload at 135,983 bytes,
+  and released the Blob after use.
+- [built] A signed arm64 test app is staged at
+  `/private/tmp/Codex Dream Skin Blob Test.app`; its injector and renderer
+  hashes match this worktree. The installed 1.5.16 app is backed up at
+  `~/Documents/Codex/DreamSkinBackups/20260901-172524/Codex Dream Skin.app`.
+- [pending] The installed engine and active theme have not been replaced. A
+  live playback check still requires the user-controlled Codex restart step.
+
 ## Issue #373 complete Codex 26.818 hotfix and v1.5.16 (2026-08-27)
 
 - [objective] Complete the portions of #373 that v1.5.15 did not ship, validate

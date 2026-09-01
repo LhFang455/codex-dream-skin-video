@@ -845,7 +845,7 @@ hot_reapply_theme() {
         write_state "$port" "$inj_pid" "$started_at" "${codex_pid:-0}" active
       fi
       /usr/bin/touch "$THEME_DIR/theme.json" || return 1
-      wait_for_video_apply_ack "$operation_token" "$inj_pid" 15 || return 1
+      wait_for_video_apply_ack "$operation_token" "$inj_pid" 60 || return 1
       mark_state_active || return 1
       write_operation_state success "$(dreamskin_text skin_applied)" "$operation_token" || return 1
       finish_client_operation "$port" success "$(dreamskin_text skin_applied)" \

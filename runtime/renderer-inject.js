@@ -111,8 +111,14 @@
   const existingStyleRegistry = window[STYLE_REGISTRY_KEY];
   const styleRegistry = existingStyleRegistry instanceof Set ? existingStyleRegistry : new Set();
   window[STYLE_REGISTRY_KEY] = styleRegistry;
+  const videoMedia = window.__CODEX_DREAM_SKIN_VIDEO_MEDIA__;
+  const videoUrl = MEDIA_KIND === "video"
+    ? videoMedia?.key === THEME.artKey && typeof videoMedia.url === "string"
+      ? videoMedia.url
+      : typeof THEME.mediaUrl === "string" ? THEME.mediaUrl : null
+    : null;
   const artUrl = (() => {
-    if (MEDIA_KIND === "video" && typeof THEME.mediaUrl === "string") return null;
+    if (MEDIA_KIND === "video") return null;
     const comma = artDataUrl.indexOf(",");
     const mime = /^data:([^;,]+)/.exec(artDataUrl)?.[1] || "image/png";
     const binary = atob(artDataUrl.slice(comma + 1));
@@ -123,14 +129,14 @@
   let videoNode = null;
 
   const installVideoLayer = () => {
-    if (MEDIA_KIND !== "video" || !document.body || typeof THEME.mediaUrl !== "string") return;
+    if (MEDIA_KIND !== "video" || !document.body || typeof videoUrl !== "string") return;
     videoNode = document.createElement("video");
     videoNode.id = "codex-dream-skin-video";
     videoNode.autoplay = true;
     videoNode.loop = true;
     videoNode.muted = true;
     videoNode.playsInline = true;
-    videoNode.src = THEME.mediaUrl;
+    videoNode.src = videoUrl;
     Object.assign(videoNode.style, {
       position: "fixed", inset: "0", width: "100vw", height: "100vh",
       objectFit: "cover", pointerEvents: "none", zIndex: "0",

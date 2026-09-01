@@ -192,7 +192,7 @@ fi
 "$NODE" "$ROOT/tests/video-size-contract.test.mjs"
 "$NODE" "$ROOT/tests/switch-video-limit.test.mjs"
 "$NODE" "$ROOT/tests/video-stream-payload.test.mjs"
-"$NODE" "$ROOT/tests/video-media-server.test.mjs"
+"$NODE" "$ROOT/tests/video-blob-transfer.test.mjs"
 "$NODE" "$ROOT/tests/video-hot-switch.test.mjs"
 "$NODE" "$ROOT/tests/video-operation-completion.test.mjs"
 "$NODE" "$ROOT/tests/update-version-source.test.mjs"

@@ -16,7 +16,12 @@ test("canonical runtime retains the video renderer contract", async () => {
   );
 
   assert.match(runtimeRenderer, /const MEDIA_KIND = THEME\.mediaKind === "video"/);
-  assert.match(runtimeRenderer, /videoNode\.src = THEME\.mediaUrl/);
+  assert.match(
+    runtimeRenderer,
+    /__CODEX_DREAM_SKIN_VIDEO_MEDIA__[\s\S]*?videoMedia\?\.key === THEME\.artKey/,
+  );
+  assert.match(runtimeRenderer, /videoNode\.src = videoUrl/);
+  assert.match(runtimeRenderer, /typeof THEME\.mediaUrl === "string" \? THEME\.mediaUrl/);
   assert.match(runtimeRenderer, /const analyzeVideoPalette = \(\) => new Promise/);
   assert.match(runtimeCss, /data-dream-media-kind="video"/);
   assert.match(
