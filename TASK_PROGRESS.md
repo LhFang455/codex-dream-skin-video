@@ -1,5 +1,29 @@
 # Task Progress
 
+## Installed video edition source sync (2026-09-04)
+
+- [scope] Synchronize the current installed v1.5.16 video edition to the
+  requested LhFang455/codex-dream-skin-video repository on
+  `codex/v1516-video-100m`. Do not restart the app, change themes, force-push,
+  or trigger a main-branch release. Personal media and backups are excluded.
+- [installed correspondence] All scripts and assets present in the installed
+  app engine and deployed engine match the macOS source. Only source-side
+  build/distribution helpers are absent from the installed engines.
+- [current changes] Preserve the confirmed video-only composer, user bubble,
+  code-card and overlay translucency rules and their regression tests.
+  Background alpha is 0.50 for the composer, 0.30 for user bubbles and code
+  bodies, and 0.40 for composer overlays and code action bars.
+- [verification] Fresh portable Node suites: 139 passed, zero failures.
+  macOS repository regressions passed, including 12 native Swift tests.
+  Signed-app integration and Doctor checks were explicitly skipped using
+  the CI options to avoid touching the active app. Windows native PowerShell
+  tests and release packaging were not run on this host.
+- [known issue] A visible background can coexist with a failed injection
+  verification alert. The exact failing startup/home predicate has not been
+  established; this source sync does not claim to fix it.
+- [historical status] The September 1 pending-install entry below describes
+  that earlier checkpoint; the Blob-transfer engine is now installed.
+
 ## Codex 26.825 video CSP compatibility (2026-09-01)
 
 - [objective] Restore small and large local video themes after Codex 26.825

@@ -99,12 +99,36 @@ test("video mode clears semantic overlays and search controls without changing i
     "the diff list’s nested black surface must be clear");
   assert.match(finalOverrides, /group\\\/home-suggestions button[\s\S]*?\/ \.28/,
     "the directly visible home suggestion cards must remain semi-transparent");
-  assert.match(finalOverrides, /\.composer-surface-chrome \{[\s\S]*?background: transparent/,
-    "the directly visible composer shell must be clear");
-  assert.match(finalOverrides, /\[class\*="_ComposerLayoutRoot_"\][\s\S]*?background: transparent/,
-    "the opaque native composer root must be removed in video mode");
+  assert.match(finalOverrides, /\[class\*="_ComposerLayoutRoot_"\]\s*\{[^}]*?\/ \.50[^}]*?box-shadow:/,
+    "the native composer root must keep a 50% tint and shadow over video");
   assert.match(finalOverrides, /\[role="dialog"\][\s\S]*?input\[type="text"\][\s\S]*?\/ \.38/,
     "slash and Skill search inputs must stay semi-transparent");
+});
+
+test("video conversation surfaces stay lighter than their generic opaque cards", () => {
+  const finalOverrides = css.slice(css.lastIndexOf("Video-only overlay and search transparency"));
+  assert.match(finalOverrides,
+    /data-local-conversation-user-anchor\][^{}]*?\[data-ds-part="message"\]\s*\{[^}]*?\/ \.30/,
+    "user message bubbles should use a 30% video-only tint");
+  assert.match(finalOverrides,
+    /data-response-annotation-conversation[\s\S]*?\/ \.26[\s\S]*?box-shadow:/,
+    "assistant message surfaces should use a 26% video-only tint");
+  assert.match(finalOverrides,
+    /data-local-conversation-item-target-ids[\s\S]*?\/ \.30[\s\S]*?box-shadow:/,
+    "tool and status surfaces should use a 30% video-only tint");
+});
+
+test("video composer overlays and Skill cards remain translucent", () => {
+  const finalOverrides = css.slice(css.lastIndexOf("Video-only overlay and search transparency"));
+  assert.match(finalOverrides,
+    /data-composer-overlay-floating-ui="true"\] > \*\s*\{[^}]*?\/ \.40/,
+    "composer add-content, slash, and Skill overlays should use a 40% tint");
+  assert.match(finalOverrides,
+    /\[class\*="_CodeBlock_"\]\s*\{[^}]*?\/ \.30/,
+    "Skill and code card bodies should use a 30% tint");
+  assert.match(finalOverrides,
+    /\[class\*="_CodeBlock_"\] \[class\*="_StickyActionBar_"\]\s*\{[^}]*?\/ \.40[^}]*?background-image: none/,
+    "Skill and code card action bars should use a 40% tint without an opaque gradient");
 });
 
 test("a completed external apply closes an operation opened before the target connected", () => {

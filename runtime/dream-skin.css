@@ -1529,6 +1529,31 @@ html[data-dream-skin="active"][data-dream-media-kind="video"] :is([role="menu"],
   box-shadow: 0 12px 28px rgb(var(--ds-bg-rgb) / .14) !important;
 }
 
+/* Current Codex composer menus do not expose menu or dialog roles. Target the
+   floating shell directly so add-content, slash, and Skill menus stay clear. */
+html[data-dream-skin="active"][data-dream-media-kind="video"]
+  [data-composer-overlay-floating-ui="true"] > * {
+  background: rgb(var(--ds-panel-rgb) / .40) !important;
+  border-color: rgb(var(--ds-accent-rgb) / .34) !important;
+  box-shadow: 0 12px 28px rgb(var(--ds-bg-rgb) / .14) !important;
+  backdrop-filter: none !important;
+}
+
+/* Skill instructions and code output use a separate native card surface and
+   an opaque sticky action bar. Keep both readable without hiding the video. */
+html[data-dream-skin="active"][data-dream-media-kind="video"] [class*="_CodeBlock_"] {
+  background: rgb(var(--ds-panel-rgb) / .30) !important;
+  border-color: rgb(var(--ds-muted-rgb) / .18) !important;
+  backdrop-filter: none !important;
+}
+
+html[data-dream-skin="active"][data-dream-media-kind="video"]
+  [class*="_CodeBlock_"] [class*="_StickyActionBar_"] {
+  background: rgb(var(--ds-panel-rgb) / .40) !important;
+  background-image: none !important;
+  backdrop-filter: none !important;
+}
+
 html[data-dream-skin="active"][data-dream-media-kind="video"] .composer-surface-chrome > :not(button),
 html[data-dream-skin="active"][data-dream-media-kind="video"] .composer-surface-chrome :is(form, textarea, [contenteditable="true"], [role="textbox"], .ProseMirror),
 html[data-dream-skin="active"][data-dream-media-kind="video"] article :is(div, section, li) {
@@ -1550,8 +1575,12 @@ html[data-dream-skin="active"][data-dream-media-kind="video"] [role="main"]:has(
 }
 
 html[data-dream-skin="active"][data-dream-media-kind="video"] [class*="_ComposerLayoutRoot_"] {
-  background: transparent !important;
-  box-shadow: none !important;
+  background: rgb(var(--ds-panel-rgb) / .50) !important;
+  border: 1px solid rgb(var(--ds-accent-rgb) / .32) !important;
+  box-shadow:
+    0 10px 32px rgb(var(--ds-bg-rgb) / .16),
+    inset 0 1px rgb(var(--ds-text-rgb) / .12) !important;
+  backdrop-filter: none !important;
 }
 
 html[data-dream-skin="active"][data-dream-media-kind="video"] [class*="_ComposerLayoutFooter_"] {
@@ -1595,6 +1624,37 @@ html[data-dream-skin="active"][data-dream-media-kind="video"] main .ProseMirror 
   background: transparent !important;
   border-color: transparent !important;
   box-shadow: none !important;
+}
+
+/* Conversation content needs less tint than the generic image-theme cards,
+   while retaining enough separation to stay readable over moving frames. */
+html[data-dream-skin="active"][data-dream-media-kind="video"]
+  [data-local-conversation-user-anchor] [data-ds-part="message"] {
+  background: rgb(var(--ds-panel-rgb) / .30) !important;
+}
+
+html[data-dream-skin="active"][data-dream-media-kind="video"] .thread-scroll-container
+  [data-response-annotation-conversation][data-response-annotation-target] {
+  background:
+    linear-gradient(135deg, rgb(var(--ds-text-rgb) / .04), transparent 42%),
+    rgb(var(--ds-panel-rgb) / .26) !important;
+  border-color: rgb(var(--ds-muted-rgb) / .16) !important;
+  box-shadow:
+    0 8px 24px rgb(var(--ds-bg-rgb) / .10),
+    inset 0 1px rgb(var(--ds-text-rgb) / .10) !important;
+  backdrop-filter: none !important;
+}
+
+html[data-dream-skin="active"][data-dream-media-kind="video"] .thread-scroll-container
+  [data-local-conversation-item-target-ids] {
+  background:
+    linear-gradient(135deg, rgb(var(--ds-text-rgb) / .04), transparent 46%),
+    rgb(var(--ds-panel-rgb) / .30) !important;
+  border-color: rgb(var(--ds-muted-rgb) / .16) !important;
+  box-shadow:
+    0 8px 22px rgb(var(--ds-bg-rgb) / .10),
+    inset 0 1px rgb(var(--ds-text-rgb) / .10) !important;
+  backdrop-filter: none !important;
 }
 
 /* Bright video frames can wash out the palette-derived purple home accents.
