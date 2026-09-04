@@ -30,7 +30,9 @@ CODEX_APP_JOB_LABEL="com.openai.codex-dream-skin-studio.app"
 INJECTOR_JOB_LABEL="com.openai.codex-dream-skin-studio.injector"
 EXPECTED_CODEX_TEAM_ID="2DC432GLL2"
 EXPECTED_CODEX_REQUIREMENT="anchor apple generic and certificate leaf[subject.OU] = \"$EXPECTED_CODEX_TEAM_ID\""
-SKIN_VERSION="1.5.14"
+SKIN_VERSION="1.5.16"
+DREAM_SKIN_MAX_VIDEO_BYTES=104857600
+export DREAM_SKIN_MAX_VIDEO_BYTES
 DREAM_SKIN_VALIDATED_RUNTIME_PID=""
 DREAM_SKIN_VALIDATED_RUNTIME_BUNDLE=""
 DREAM_SKIN_VALIDATED_RUNTIME_EXE=""
@@ -204,6 +206,31 @@ finish_client_operation() {
     --port "$port" --timeout-ms "$timeout_ms" 2>>"$INJECTOR_ERROR_LOG"
 }
 
+wait_for_video_apply_ack() {
+  local operation_token="$1"
+  local injector_pid="$2"
+  local timeout_seconds="${3:-15}"
+  local attempts=$((timeout_seconds * 10))
+  local ack_token=""
+  local ack_mode=""
+  while [ "$attempts" -gt 0 ]; do
+    /bin/kill -0 "$injector_pid" 2>/dev/null || return 1
+    if [ -f "$OPERATION_ACK_PATH" ]; then
+      ack_token="$(/usr/bin/plutil -extract operationToken raw -o - "$OPERATION_ACK_PATH" 2>/dev/null || true)"
+      if [ "$ack_token" = "$operation_token" ]; then
+        ack_mode="$(/usr/bin/plutil -extract mode raw -o - "$OPERATION_ACK_PATH" 2>/dev/null || true)"
+        case "$ack_mode" in
+          applied) return 0 ;;
+          failed) return 1 ;;
+        esac
+      fi
+    fi
+    attempts=$((attempts - 1))
+    /bin/sleep 0.1
+  done
+  return 1
+}
+
 # Seed bundled preset packs into the user's themes/ library so a fresh install
 # ships with ready-to-use skins. Idempotent (each preset is refreshed in place)
 # and scoped to preset-* ids, so user-made custom-* packs are never touched.
@@ -289,6 +316,9 @@ require_signed_node_runtime() {
 
   RUNTIME_NODE="$CODEX_BUNDLE/Contents/Resources/cua_node/bin/node"
   [ -x "$RUNTIME_NODE" ] || fail "The signed Node.js runtime bundled with ChatGPT was not found: $RUNTIME_NODE"
+  /usr/bin/codesign --verify --strict \
+    --test-requirement "=$EXPECTED_CODEX_REQUIREMENT" "$RUNTIME_NODE" >/dev/null 2>&1 \
+    || fail "The Node.js runtime bundled with ChatGPT failed code-signature validation."
 
   CODEX_TEAM_ID="$(codesign_team_id "$CODEX_BUNDLE")"
   NODE_TEAM_ID="$(codesign_team_id "$RUNTIME_NODE")"
@@ -316,13 +346,15 @@ require_signed_node_runtime() {
 verify_macos_app_signature() {
   local verification_mode="${1:-deep}"
   case "$verification_mode" in deep|quick) ;; *) fail "Unknown runtime verification mode: $verification_mode" ;; esac
-  # Recent official ChatGPT bundles are accepted by macOS at launch but do not
-  # satisfy `codesign --verify --strict`. Keep the bundle/runtime OpenAI team
-  # checks in require_signed_node_runtime; they are the compatible identity
-  # boundary for the local launcher.
-  CODEX_TEAM_ID="$(codesign_team_id "$CODEX_BUNDLE")"
-  [ "$CODEX_TEAM_ID" = "$EXPECTED_CODEX_TEAM_ID" ] \
-    || fail "Unexpected ChatGPT signing team: ${CODEX_TEAM_ID:-missing}."
+  if [ "$verification_mode" = "deep" ]; then
+    /usr/bin/codesign --verify --deep --strict \
+      --test-requirement "=$EXPECTED_CODEX_REQUIREMENT" "$CODEX_BUNDLE" >/dev/null 2>&1 \
+      || fail "The ChatGPT app signature is not valid. Restore or reinstall the official app before continuing."
+  else
+    /usr/bin/codesign --verify --strict \
+      --test-requirement "=$EXPECTED_CODEX_REQUIREMENT" "$CODEX_BUNDLE" >/dev/null 2>&1 \
+      || fail "The ChatGPT app signature is not valid. Restore or reinstall the official app before continuing."
+  fi
 }
 
 require_macos_runtime() {
@@ -783,6 +815,7 @@ hot_reapply_theme() {
   local injector_mode=""
   local started_at=""
   local codex_pid=""
+  local theme_media=""
 
   # A generic HTTP listener is not enough for a hot re-apply: only use the
   # endpoint already verified as belonging to the official Codex process.
@@ -792,27 +825,6 @@ hot_reapply_theme() {
   write_operation_state applying "$(dreamskin_text applying_selected_theme)" "$operation_token" || return 1
   operation_args=(--operation-token "$operation_token")
 
-  # A high-resolution video is served by the persistent injector over a
-  # tokenized loopback URL. Do not send it through one huge CDP command.
-  theme_media="$("$NODE" -e 'try{const t=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(t.image||""))}catch{}' "$THEME_DIR/theme.json" 2>/dev/null || true)"
-  case "$theme_media" in
-    *.mp4|*.MP4|*.webm|*.WEBM)
-      stop_recorded_injector 2>/dev/null || return 1
-      inj_pid="$(launch_injector_daemon "$port")" || return 1
-      /bin/kill -0 "$inj_pid" 2>/dev/null || return 1
-      # A streamed video URL belongs to the newly started injector. Trigger its
-      # theme watcher so the current renderer replaces the old, now-dead URL.
-      /usr/bin/touch "$THEME_DIR/theme.json" || return 1
-      started_at="$(process_started_at "$inj_pid")"
-      codex_pid="$(codex_main_pids 2>/dev/null | /usr/bin/head -n 1)"
-      [ -n "$started_at" ] || started_at="$(/bin/date)"
-      write_state "$port" "$inj_pid" "$started_at" "${codex_pid:-0}" active
-      write_operation_state success "$(dreamskin_text skin_applied)" "$operation_token" || return 1
-      finish_client_operation "$port" success "$(dreamskin_text skin_applied)" "$operation_token" || return 1
-      return 0
-      ;;
-  esac
-
   injector_protocol="$(state_field injectorProtocol 2>/dev/null || true)"
   injector_mode="$(state_field injectorMode 2>/dev/null || true)"
   if [ "$injector_protocol" = "2" ] || [ "$injector_protocol" = "3" ]; then
@@ -820,6 +832,27 @@ hot_reapply_theme() {
       index($0, inj) && index($0, "--watch") && index($0, "--port " port " --theme-dir ") { print $1; exit }
     ')"
   fi
+  theme_media="$("$NODE" -e 'try{const t=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(t.image||""))}catch{}' "$THEME_DIR/theme.json" 2>/dev/null || true)"
+  case "$theme_media" in
+    *.mp4|*.MP4|*.webm|*.WEBM)
+      if [ -z "$inj_pid" ] || ! /bin/kill -0 "$inj_pid" 2>/dev/null \
+        || [ "$injector_mode" = "control" ]; then
+        inj_pid="$(launch_injector_daemon "$port")" || return 1
+        /bin/kill -0 "$inj_pid" 2>/dev/null || return 1
+        started_at="$(process_started_at "$inj_pid")"
+        codex_pid="$(codex_main_pids 2>/dev/null | /usr/bin/head -n 1)"
+        [ -n "$started_at" ] || started_at="$(/bin/date)"
+        write_state "$port" "$inj_pid" "$started_at" "${codex_pid:-0}" active
+      fi
+      /usr/bin/touch "$THEME_DIR/theme.json" || return 1
+      wait_for_video_apply_ack "$operation_token" "$inj_pid" 60 || return 1
+      mark_state_active || return 1
+      write_operation_state success "$(dreamskin_text skin_applied)" "$operation_token" || return 1
+      finish_client_operation "$port" success "$(dreamskin_text skin_applied)" \
+        "$operation_token" || return 1
+      return 0
+      ;;
+  esac
   if ! "$NODE" "$INJECTOR" --once --port "$port" --theme-dir "$THEME_DIR" \
     --timeout-ms "$timeout_ms" "${operation_args[@]}" >/dev/null 2>&1; then
     return 1

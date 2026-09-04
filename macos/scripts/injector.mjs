@@ -44,15 +44,15 @@ const stableTestidLiteral = (testid) => {
   }
   return JSON.stringify(`[data-testid="${testid}"]`);
 };
-const SKIN_VERSION = "1.5.14";
+const SKIN_VERSION = "1.5.16";
 // .github/workflows/ci.yml's version-consistency check greps this file for a
 // literal `const SKIN_VERSION = "...";` line, so the export stays a separate
 // statement rather than an inline `export const`.
 export { SKIN_VERSION };
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
 const CDP_ID_PATTERN = /^[A-Za-z0-9._-]{1,200}$/;
-const MAX_ART_BYTES = 100 * 1024 * 1024;
-const MAX_VIDEO_BYTES = 20 * 1024 * 1024;
+const MAX_ART_BYTES = 10 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 const MAX_SAFE_CSS_BYTES = 256 * 1024;
 const OPERATION_UI_HOST_ID = "chatgpt-dream-skin-operation";
 const OPERATION_UI_REGISTRY_KEY = "__CHATGPT_DREAM_SKIN_OPERATION_UI__";
@@ -255,6 +255,15 @@ export function assessRendererVerification(renderer, nativeWindow, expected) {
     && structurePass && windowPass && !result.documentOverflow?.x;
   const payloadPass = (!expected.expectedThemeId || result.themeId === expected.expectedThemeId)
     && (!expected.expectedRevision || result.revision === expected.expectedRevision);
+  const videoPass = expected.expectedMediaKind !== "video" || Boolean(
+    result.video?.present
+    && Number(result.video.readyState) >= 2
+    && Number(result.video.videoWidth) > 0
+    && Number(result.video.videoHeight) > 0
+    && Number(result.video.errorCode) === 0
+    && result.video.paused === false
+    && result.video.progressing === true,
+  );
   const visibleSuggestionLabels = Array.isArray(result.suggestionLabels)
     ? result.suggestionLabels.filter((item) => item?.visible) : [];
   const homeFallbackVisible = Boolean(homeRoute && result.homePresent && result.genericMain?.visible);
@@ -274,10 +283,11 @@ export function assessRendererVerification(renderer, nativeWindow, expected) {
     nativeWindowPass,
     payloadPass,
     structurePass,
+    videoPass,
     viewportPass,
     windowPass,
   };
-  result.pass = Boolean(basePass && homePass && payloadPass);
+  result.pass = Boolean(basePass && homePass && payloadPass && videoPass);
   result.expectedThemeId = expected.expectedThemeId;
   result.expectedRevision = expected.expectedRevision;
   result.softNotes = {
@@ -512,8 +522,13 @@ async function listAppTargets(port) {
 
 async function probeSession(session) {
   return session.evaluate(`(() => {
-    const canonicalRoot = location.protocol === 'app:' &&
-      location.pathname === '/index.html' && !location.search;
+    const initialRoute = new URLSearchParams(String(location.search || ''))
+      .get('initialRoute') || '';
+    const pathname = String(location.pathname || '');
+    const excludedPetSurface = location.protocol === 'app:' && (
+      pathname.endsWith('/avatar-overlay-composition-surface.html') ||
+      initialRoute === '/avatar-overlay' || initialRoute.startsWith('/avatar-overlay/')
+    );
     const genericCodexSurface = () => {
       if (location.protocol !== 'app:') return false;
       const main = document.querySelector('main, [role="main"]');
@@ -535,8 +550,9 @@ async function probeSession(session) {
       Boolean(document.querySelector(${stableTestidLiteral("theme-preview")}));
     return {
       markers,
-      codex: location.protocol === 'app:' &&
-        ((markers.shell && markers.sidebar) || settings || markers.main || markers.generic || canonicalRoot),
+      excludedPetSurface,
+      codex: !excludedPetSurface && location.protocol === 'app:' &&
+        ((markers.shell && markers.sidebar) || settings || markers.main || markers.generic),
     };
   })()`);
 }
@@ -569,7 +585,12 @@ async function connectCodexTargets(port, timeoutMs) {
           session = await connectTarget(target, port);
           const probe = await probeSession(session);
           if (probe?.codex) connected.push({ target, session, probe });
-          else session.close();
+          else {
+            if (probe?.excludedPetSurface && !await cleanupExcludedSurface(session)) {
+              throw new Error("Excluded Pet surface cleanup did not verify");
+            }
+            session.close();
+          }
         } catch (error) {
           session?.close();
           lastError = error;
@@ -759,16 +780,33 @@ export async function loadTheme(themeDir) {
     ) {
       throw new Error(`Theme media must be a stable non-empty file no larger than ${maxBytes} bytes`);
     }
-    const art = await imageHandle.readFile();
-    if (art.length < 1 || art.length > maxBytes) {
+    const mediaKind = [".mp4", ".webm"].includes(extension) ? "video" : "image";
+    let art = null;
+    const artHash = createHash("sha256");
+    if (mediaKind === "video") {
+      for await (const chunk of imageHandle.createReadStream({ autoClose: false })) {
+        artHash.update(chunk);
+      }
+    } else {
+      art = await imageHandle.readFile();
+      artHash.update(art);
+    }
+    const afterReadStat = await imageHandle.stat();
+    if (!sameFileStat(openedStat, afterReadStat) || (art && art.length !== afterReadStat.size)) {
+      throw new Error("Theme media changed while being loaded");
+    }
+    if (afterReadStat.size < 1 || afterReadStat.size > maxBytes) {
       throw new Error(`Theme media must be a non-empty file no larger than ${maxBytes} bytes`);
     }
     const safeCss = await loadSafeCss(assetsRoot);
     return {
       art,
+      artKey: artHash.digest("hex").slice(0, 20),
       assetsRoot,
       extension,
-      mediaKind: [".mp4", ".webm"].includes(extension) ? "video" : "image",
+      mediaBytes: afterReadStat.size,
+      mediaKind,
+      mediaStat: afterReadStat,
       mime: extension === ".mp4" ? "video/mp4"
         : extension === ".webm" ? "video/webm"
         : extension === ".jpg" || extension === ".jpeg" ? "image/jpeg"
@@ -804,28 +842,27 @@ function invalidateStaticPayloadAssets() {
   staticPayloadAssets = null;
 }
 
-export async function loadPayload(themeDir, videoMediaUrl = null) {
+export async function loadPayload(themeDir) {
   const startedAt = performance.now();
   const [staticAssets, loaded] = await Promise.all([
     loadStaticPayloadAssets(),
     loadTheme(themeDir),
   ]);
   const { css, template } = staticAssets;
-  const { art, extension, imagePath, mediaKind, mime, safeCssRuntime, safeCssStatus, theme } = loaded;
+  const {
+    art, artKey, extension, imagePath, mediaBytes, mediaKind, mediaStat,
+    mime, safeCssRuntime, safeCssStatus, theme,
+  } = loaded;
   const combinedCss = safeCssRuntime ? `${css}\n${safeCssRuntime}\n` : css;
   const styleRevision = createHash("sha256").update(combinedCss).digest("hex").slice(0, 20);
   const artMetadata = mediaKind === "image" ? readImageMetadata(art, extension) : null;
   if (mediaKind === "image" && !artMetadata) {
     throw new Error("Theme image metadata is invalid or exceeds the 16384px / 50MP safety limit");
   }
-  const artKey = createHash("sha256").update(art).digest("hex").slice(0, 20);
   theme.artMetadata = artMetadata;
   theme.mediaKind = mediaKind;
   theme.artKey = artKey;
-  const streamedVideo = mediaKind === "video" && art.length > 10 * 1024 * 1024
-    && typeof videoMediaUrl === "string";
-  if (streamedVideo) theme.mediaUrl = videoMediaUrl;
-  const artDataUrl = streamedVideo ? "" : `data:${mime};base64,${art.toString("base64")}`;
+  const artDataUrl = mediaKind === "video" ? "" : `data:${mime};base64,${art.toString("base64")}`;
   const revision = createHash("sha256")
     .update(SKIN_VERSION)
     .update(combinedCss)
@@ -846,9 +883,10 @@ export async function loadPayload(themeDir, videoMediaUrl = null) {
     .replace("__DREAM_SKIN_PAYLOAD_REVISION_JSON__", () => JSON.stringify(revision));
   assertPayloadIntegrity(payload);
   return {
-    imageBytes: art.length,
+    imageBytes: mediaBytes,
     mediaPath: imagePath,
     mediaMime: mime,
+    mediaStat,
     payload,
     revision,
     safeCssStatus,
@@ -860,26 +898,180 @@ export async function loadPayload(themeDir, videoMediaUrl = null) {
   };
 }
 
-async function createVideoMediaServer() {
+const VIDEO_MEDIA_KEY = "__CODEX_DREAM_SKIN_VIDEO_MEDIA__";
+const VIDEO_TRANSFER_KEY = "__CODEX_DREAM_SKIN_VIDEO_TRANSFER__";
+const DEFAULT_VIDEO_CHUNK_BYTES = 1024 * 1024;
+
+export async function clearTransferredVideo(session) {
+  return session.evaluate(`(() => {
+    const mediaKey = ${JSON.stringify(VIDEO_MEDIA_KEY)};
+    const transferKey = ${JSON.stringify(VIDEO_TRANSFER_KEY)};
+    const media = window[mediaKey];
+    if (typeof media?.url === "string") {
+      try { URL.revokeObjectURL(media.url); } catch {}
+    }
+    delete window[mediaKey];
+    delete window[transferKey];
+    return true;
+  })()`);
+}
+
+export async function transferVideoBlob(
+  session,
+  loaded,
+  { chunkBytes = DEFAULT_VIDEO_CHUNK_BYTES } = {},
+) {
+  if (loaded?.theme?.mediaKind !== "video") {
+    throw new Error("Blob transfer requires a validated video theme");
+  }
+  if (!Number.isSafeInteger(chunkBytes) || chunkBytes < 64 || chunkBytes > 2 * 1024 * 1024) {
+    throw new Error("Video transfer chunk size is outside the safe range");
+  }
+  const expectedStat = loaded.mediaStat;
+  const expectedBytes = Number(expectedStat?.size);
+  if (!Number.isSafeInteger(expectedBytes) || expectedBytes < 1 || expectedBytes > MAX_VIDEO_BYTES) {
+    throw new Error("Video transfer requires a stable validated file size");
+  }
+  let handle;
+  try {
+    handle = await fs.open(
+      loaded.mediaPath,
+      fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0),
+    );
+    const openedStat = await handle.stat();
+    if (!openedStat.isFile() || !sameFileStat(openedStat, expectedStat)) {
+      throw new Error("Theme video changed after validation");
+    }
+    const key = loaded.theme.artKey;
+    const mime = loaded.mediaMime;
+    await session.evaluate(`(() => {
+      window[${JSON.stringify(VIDEO_TRANSFER_KEY)}] = {
+        key: ${JSON.stringify(key)},
+        mime: ${JSON.stringify(mime)},
+        totalBytes: ${expectedBytes},
+        chunks: [],
+        received: 0,
+      };
+      return true;
+    })()`);
+
+    let offset = 0;
+    let chunks = 0;
+    while (offset < expectedBytes) {
+      const length = Math.min(chunkBytes, expectedBytes - offset);
+      const buffer = Buffer.allocUnsafe(length);
+      const { bytesRead } = await handle.read(buffer, 0, length, offset);
+      if (bytesRead !== length) throw new Error("Theme video changed while being transferred");
+      const base64 = buffer.toString("base64", 0, bytesRead);
+      const received = await session.evaluate(`(() => {
+        const transfer = window[${JSON.stringify(VIDEO_TRANSFER_KEY)}];
+        if (!transfer || transfer.key !== ${JSON.stringify(key)}) {
+          throw new Error("Video transfer state was replaced");
+        }
+        const binary = atob(${JSON.stringify(base64)});
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index += 1) {
+          bytes[index] = binary.charCodeAt(index);
+        }
+        transfer.chunks.push(bytes);
+        transfer.received += bytes.byteLength;
+        return transfer.received;
+      })()`, 20000);
+      offset += bytesRead;
+      chunks += 1;
+      if (received !== offset) throw new Error("Renderer video transfer byte count did not match");
+    }
+
+    const afterStat = await handle.stat();
+    if (!sameFileStat(afterStat, expectedStat)) {
+      throw new Error("Theme video changed while being transferred");
+    }
+    const result = await session.evaluate(`(() => {
+      const mediaKey = ${JSON.stringify(VIDEO_MEDIA_KEY)};
+      const transferKey = ${JSON.stringify(VIDEO_TRANSFER_KEY)};
+      const transfer = window[transferKey];
+      if (!transfer || transfer.key !== ${JSON.stringify(key)}
+        || transfer.received !== transfer.totalBytes) {
+        throw new Error("Video transfer did not complete");
+      }
+      const blob = new Blob(transfer.chunks, { type: transfer.mime });
+      if (blob.size !== transfer.totalBytes) throw new Error("Video Blob size did not match");
+      const url = URL.createObjectURL(blob);
+      const previous = window[mediaKey];
+      window[mediaKey] = {
+        key: transfer.key,
+        mime: transfer.mime,
+        size: blob.size,
+        blob,
+        url,
+      };
+      delete window[transferKey];
+      if (typeof previous?.url === "string" && previous.url !== url) {
+        try { URL.revokeObjectURL(previous.url); } catch {}
+      }
+      return { key: transfer.key, size: blob.size, url };
+    })()`, 20000);
+    return { ...result, chunks };
+  } catch (error) {
+    await session.evaluate(`(() => {
+      delete window[${JSON.stringify(VIDEO_TRANSFER_KEY)}];
+      return true;
+    })()`).catch(() => {});
+    throw error;
+  } finally {
+    await handle?.close();
+  }
+}
+
+export async function createVideoMediaServer() {
   const token = randomBytes(24).toString("hex");
   const route = `/media/${token}`;
   let media = null;
   const server = createServer(async (request, response) => {
-    if (request.method !== "GET" || request.url !== route || !media) {
+    let requestUrl;
+    try {
+      requestUrl = new URL(request.url ?? "", "http://127.0.0.1");
+    } catch {
+      response.writeHead(404).end();
+      return;
+    }
+    if (
+      request.method !== "GET"
+      || requestUrl.pathname !== route
+      || requestUrl.searchParams.get("v") !== media?.fingerprint
+      || !media
+    ) {
       response.writeHead(404).end();
       return;
     }
     try {
       const stat = await fs.stat(media.path);
-      if (!stat.isFile() || stat.size < 1) throw new Error("Theme video is unavailable");
+      if (!stat.isFile() || (media.stat && !sameFileStat(stat, media.stat))) {
+        throw new Error("Theme video is unavailable");
+      }
       let start = 0;
       let end = stat.size - 1;
       let status = 200;
-      const match = /^bytes=(\d*)-(\d*)$/i.exec(request.headers.range || "");
-      if (match) {
-        start = match[1] ? Number(match[1]) : start;
-        end = match[2] ? Number(match[2]) : end;
-        if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start > end || end >= stat.size) {
+      const rangeHeader = request.headers.range;
+      if (rangeHeader) {
+        const match = /^bytes=(\d*)-(\d*)$/i.exec(rangeHeader);
+        if (!match || (!match[1] && !match[2])) {
+          response.writeHead(416, { "Content-Range": `bytes */${stat.size}` }).end();
+          return;
+        }
+        if (!match[1]) {
+          const suffixLength = Number(match[2]);
+          if (!Number.isSafeInteger(suffixLength) || suffixLength < 1) {
+            response.writeHead(416, { "Content-Range": `bytes */${stat.size}` }).end();
+            return;
+          }
+          start = Math.max(0, stat.size - suffixLength);
+        } else {
+          start = Number(match[1]);
+          end = match[2] ? Number(match[2]) : end;
+        }
+        if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end)
+          || start < 0 || start > end || end >= stat.size) {
           response.writeHead(416, { "Content-Range": `bytes */${stat.size}` }).end();
           return;
         }
@@ -887,11 +1079,15 @@ async function createVideoMediaServer() {
       }
       response.writeHead(status, {
         "Accept-Ranges": "bytes",
+        "Cache-Control": "no-store",
         "Content-Length": end - start + 1,
         "Content-Type": media.mime,
+        "X-Content-Type-Options": "nosniff",
         ...(status === 206 ? { "Content-Range": `bytes ${start}-${end}/${stat.size}` } : {}),
       });
-      createReadStream(media.path, { start, end }).on("error", () => response.destroy()).pipe(response);
+      createReadStream(media.path, { start, end })
+        .on("error", () => response.destroy())
+        .pipe(response);
     } catch {
       response.writeHead(404).end();
     }
@@ -901,13 +1097,24 @@ async function createVideoMediaServer() {
     server.listen(0, "127.0.0.1", resolve);
   });
   const address = server.address();
-  if (!address || typeof address === "string") throw new Error("Could not bind the local video server");
+  if (!address || typeof address === "string") {
+    await new Promise((resolve) => server.close(resolve));
+    throw new Error("Could not bind the local video server");
+  }
   return {
     url: `http://127.0.0.1:${address.port}${route}`,
-    set: (payload) => { media = payload.theme.mediaKind === "video" ? {
-      path: payload.mediaPath, mime: payload.mediaMime,
-    } : null; },
-    close: () => new Promise((resolve) => server.close(resolve)),
+    set: (payload) => {
+      media = payload.theme.mediaKind === "video" ? {
+        fingerprint: payload.theme.artKey,
+        mime: payload.mediaMime,
+        path: payload.mediaPath,
+        stat: payload.mediaStat,
+      } : null;
+    },
+    close: () => new Promise((resolve, reject) => server.close((error) => {
+      if (error) reject(error);
+      else resolve();
+    })),
   };
 }
 
@@ -934,6 +1141,16 @@ export function assertPayloadIntegrity(payload) {
 
 async function applyToSession(session, payload) {
   return session.evaluate(payload);
+}
+
+async function applyLoadedTheme(session, loaded) {
+  if (loaded.theme.mediaKind === "video") {
+    await transferVideoBlob(session, loaded);
+    return applyToSession(session, loaded.payload);
+  }
+  const result = await applyToSession(session, loaded.payload);
+  await clearTransferredVideo(session);
+  return result;
 }
 
 function nextOperationToken() {
@@ -1102,9 +1319,7 @@ async function removeFromSession(session) {
   return session.evaluate(`(() => {
     window.__CODEX_DREAM_SKIN_DISABLED__ = true;
     const state = window.__CODEX_DREAM_SKIN_STATE__;
-    let cleaned = false;
-    try { cleaned = Boolean(state?.cleanup && state.cleanup()); } catch {}
-    if (cleaned) return true;
+    try { state?.cleanup?.(); } catch {}
     const root = document.documentElement;
     for (const attribute of [...(root?.attributes || [])]) {
       if (attribute.name.startsWith('data-dream-')) root.removeAttribute(attribute.name);
@@ -1124,6 +1339,10 @@ async function removeFromSession(session) {
     }
     delete window.__CODEX_DREAM_SKIN_STYLE_SHEETS__;
     try { if (state?.artUrl) URL.revokeObjectURL(state.artUrl); } catch {}
+    const videoMedia = window[${JSON.stringify(VIDEO_MEDIA_KEY)}];
+    try { if (videoMedia?.url) URL.revokeObjectURL(videoMedia.url); } catch {}
+    delete window[${JSON.stringify(VIDEO_MEDIA_KEY)}];
+    delete window[${JSON.stringify(VIDEO_TRANSFER_KEY)}];
     document.getElementById('codex-dream-skin-style')?.remove();
     delete window.__CODEX_DREAM_SKIN_STATE__;
     return true;
@@ -1143,8 +1362,15 @@ async function verifyRemovedSession(session) {
       [...document.adoptedStyleSheets].some((sheet) => sheets.has(sheet)));
     return !hasAttributes && !hasVariables && !hasParts && !hasSheets &&
       !document.getElementById('codex-dream-skin-style') &&
-      !window.__CODEX_DREAM_SKIN_STATE__;
+      !window.__CODEX_DREAM_SKIN_STATE__ &&
+      !window[${JSON.stringify(VIDEO_MEDIA_KEY)}] &&
+      !window[${JSON.stringify(VIDEO_TRANSFER_KEY)}];
   })()`);
+}
+
+export async function cleanupExcludedSurface(session) {
+  if (!await removeFromSession(session)) return false;
+  return verifyRemovedSession(session);
 }
 
 export async function inspectNativeWindow(session) {
@@ -1160,7 +1386,13 @@ export async function inspectNativeWindow(session) {
   }
 }
 
-export async function verifySession(session, expectedThemeId = null, expectedRevision = null) {
+export async function verifySession(
+  session,
+  expectedThemeId = null,
+  expectedRevision = null,
+  expectedMediaKind = null,
+  previousVideoTime = null,
+) {
   const renderer = await session.evaluate(`(() => {
     const box = (node) => {
       if (!node) return null;
@@ -1250,6 +1482,7 @@ export async function verifySession(session, expectedThemeId = null, expectedRev
       [...document.adoptedStyleSheets].includes(runtime.styleSheet);
     const fallback = runtime?.styleMode === 'style' &&
       document.getElementById('codex-dream-skin-style') === runtime.styleNode;
+    const videoNode = document.getElementById('codex-dream-skin-video');
     const result = {
       installed: document.documentElement.getAttribute('data-dream-skin') === 'active',
       documentVisibility: document.visibilityState,
@@ -1276,6 +1509,15 @@ export async function verifySession(session, expectedThemeId = null, expectedRev
       genericMain,
       genericInput,
       settings,
+      video: videoNode ? {
+        present: true,
+        readyState: videoNode.readyState,
+        videoWidth: videoNode.videoWidth,
+        videoHeight: videoNode.videoHeight,
+        paused: videoNode.paused,
+        currentTime: videoNode.currentTime,
+        errorCode: videoNode.error?.code ?? 0,
+      } : null,
       viewport: { width: innerWidth, height: innerHeight },
       documentOverflow: {
         x: document.documentElement.scrollWidth > document.documentElement.clientWidth,
@@ -1284,11 +1526,18 @@ export async function verifySession(session, expectedThemeId = null, expectedRev
     };
     return result;
   })()`);
+  if (renderer.video) {
+    const currentTime = Number(renderer.video.currentTime);
+    renderer.video.progressing = Number.isFinite(previousVideoTime)
+      && Number.isFinite(currentTime)
+      && currentTime - previousVideoTime >= 0.01;
+  }
   const nativeWindow = await inspectNativeWindow(session);
   return assessRendererVerification(renderer, nativeWindow, {
     skinVersion: SKIN_VERSION,
     expectedThemeId,
     expectedRevision,
+    expectedMediaKind,
   });
 }
 
@@ -1298,16 +1547,37 @@ export async function waitForVerifiedSession(
   expectedThemeId = null,
   expectedRevision = null,
   retryDelayMs = 500,
+  expectedMediaKind = null,
 ) {
   const deadline = Date.now() + timeoutMs;
   const retryDelay = Number.isFinite(retryDelayMs) && retryDelayMs >= 0 ? retryDelayMs : 500;
   let lastResult;
   let lastError;
+  let previousVideoTime = null;
   while (Date.now() < deadline) {
     try {
-      lastResult = await verifySession(session, expectedThemeId, expectedRevision);
+      lastResult = await verifySession(
+        session,
+        expectedThemeId,
+        expectedRevision,
+        expectedMediaKind,
+        previousVideoTime,
+      );
       lastError = null;
       if (lastResult.pass) return lastResult;
+      const sampledTime = Number(lastResult.video?.currentTime);
+      if (
+        expectedMediaKind === "video"
+        && lastResult.video?.present
+        && Number(lastResult.video.readyState) >= 2
+        && Number(lastResult.video.videoWidth) > 0
+        && Number(lastResult.video.videoHeight) > 0
+        && Number(lastResult.video.errorCode) === 0
+        && lastResult.video.paused === false
+        && Number.isFinite(sampledTime)
+      ) {
+        previousVideoTime = sampledTime;
+      }
     } catch (error) {
       // Renderer navigations can invalidate Runtime.evaluate while Codex is
       // swapping documents. Treat that as a transient sample until the same
@@ -1376,6 +1646,7 @@ async function runFinishOperation(options) {
 
 async function runOneShot(options) {
   const connected = await connectCodexTargets(options.port, options.timeoutMs);
+  const needsPayload = options.mode === "once" || options.mode === "verify" || options.reload;
   const operationToken = options.mode === "once" || options.mode === "remove"
     ? options.operationToken ?? nextOperationToken()
     : null;
@@ -1389,9 +1660,7 @@ async function runOneShot(options) {
   }
   let loaded = null;
   try {
-    loaded = (options.mode === "once" || options.mode === "verify" || options.reload)
-      ? await loadPayload(options.themeDir)
-      : null;
+    loaded = needsPayload ? await loadPayload(options.themeDir) : null;
   } catch (error) {
     if (operationToken) {
       await Promise.all(connected.map(({ session }) => presentOperationUi(
@@ -1401,7 +1670,6 @@ async function runOneShot(options) {
     for (const { session } of connected) session.close();
     throw error;
   }
-  const payload = loaded?.payload ?? null;
   const results = [];
   let screenshotCaptured = false;
 
@@ -1412,7 +1680,7 @@ async function runOneShot(options) {
         await bestEffortOperationUi(
           session, "update", operationToken, "loading", `正在应用「${loaded.theme.name}」…`,
         );
-        await applyToSession(session, payload);
+        await applyLoadedTheme(session, loaded);
       }
 
       if (options.reload) {
@@ -1424,7 +1692,7 @@ async function runOneShot(options) {
               session, operationToken, "loading", `正在应用「${loaded.theme.name}」…`,
             );
           }
-          await applyToSession(session, payload);
+          await applyLoadedTheme(session, loaded);
         }
       }
 
@@ -1443,6 +1711,8 @@ async function runOneShot(options) {
           options.timeoutMs,
           loaded?.theme.id ?? null,
           loaded?.revision ?? null,
+          500,
+          loaded?.theme.mediaKind ?? null,
         );
       results.push({ targetId: target.id, markers: probe?.markers, result });
       if (operationToken) {
@@ -1579,7 +1849,9 @@ async function readOperationState(statePath) {
 
 async function writeModeAck(ackPath, operationToken, mode) {
   if (!ackPath) return;
-  if (mode !== "control" && mode !== "full") throw new Error("Invalid injector ACK mode");
+  if (!["control", "full", "applied", "failed"].includes(mode)) {
+    throw new Error("Invalid injector ACK mode");
+  }
   const temporary = `${ackPath}.${process.pid}.tmp`;
   const payload = `${JSON.stringify({
     operationToken,
@@ -1659,13 +1931,13 @@ async function watchOperationState(statePath, onState) {
 }
 
 async function runWatch(options) {
-  const mediaServer = await createVideoMediaServer();
-  const loadWatchPayload = async () => {
-    const payload = await loadPayload(options.themeDir, mediaServer.url);
-    mediaServer.set(payload);
-    return payload;
-  };
-  let current = await loadWatchPayload();
+  const loadWatchPayload = () => loadPayload(options.themeDir);
+  let current;
+  try {
+    current = await loadWatchPayload();
+  } catch (error) {
+    throw error;
+  }
   const sessions = new Map();
   const rejected = new Set();
   let stopping = false;
@@ -1813,6 +2085,9 @@ async function runWatch(options) {
     try {
       next = await loadWatchPayload();
     } catch (error) {
+      if (activeOperation?.status === "applying") {
+        await writeModeAck(options.operationAck, activeOperation.token, "failed");
+      }
       await Promise.all([...sessions.values()].map(async (record) => {
         if (record.session.closed) return;
         const externalOperation = activeOperation;
@@ -1834,6 +2109,9 @@ async function runWatch(options) {
       console.log(`[dream-skin] staged theme ${current.theme.id} while skin is paused`);
       return;
     }
+    const applyAckToken = current.theme.mediaKind === "video"
+      && activeOperation?.status === "applying" ? activeOperation.token : null;
+    let verifiedTargets = 0;
     for (const record of sessions.values()) {
       const { session } = record;
       if (session.closed) continue;
@@ -1846,27 +2124,38 @@ async function runWatch(options) {
           session, operationToken, "loading", `正在应用「${current.theme.name}」…`,
         );
         if (controlOnly || mutationEpoch !== refreshEpoch) continue;
-        const nextIdentifier = await registerEarlyForRecord(
-          record, current.payload, current.revision,
-        );
-        if (controlOnly || mutationEpoch !== refreshEpoch) {
-          await removeEarlyIdentifier(record, nextIdentifier);
-          continue;
+        if (current.theme.mediaKind === "video") {
+          if (record.earlyScriptId) {
+            await removeEarlyIdentifier(record, record.earlyScriptId);
+          }
+          record.earlyScriptId = null;
+          record.needsLoadFallback = true;
+        } else {
+          const nextIdentifier = await registerEarlyForRecord(
+            record, current.payload, current.revision,
+          );
+          if (controlOnly || mutationEpoch !== refreshEpoch) {
+            await removeEarlyIdentifier(record, nextIdentifier);
+            continue;
+          }
+          if (record.earlyScriptId) {
+            await removeEarlyIdentifier(record, record.earlyScriptId);
+          }
+          record.earlyScriptId = nextIdentifier;
+          record.needsLoadFallback = !nextIdentifier;
         }
-        if (record.earlyScriptId) {
-          await removeEarlyIdentifier(record, record.earlyScriptId);
-        }
-        record.earlyScriptId = nextIdentifier;
-        record.needsLoadFallback = !nextIdentifier;
-        await applyToSession(session, current.payload);
+        await applyLoadedTheme(session, current);
         if (controlOnly || mutationEpoch !== refreshEpoch) continue;
         const verification = await waitForVerifiedSession(
           session,
           Math.min(options.timeoutMs, 8000),
           current.theme.id,
           current.revision,
+          500,
+          current.theme.mediaKind,
         );
         if (!verification?.pass) throw new Error("Theme refresh verification failed");
+        verifiedTargets += 1;
         if (!externalOperation) {
           await presentOperationUi(session, operationToken, "success", `已应用「${current.theme.name}」`);
         }
@@ -1876,6 +2165,13 @@ async function runWatch(options) {
           await presentOperationUi(session, operationToken, "error", "主题切换失败，未确认应用");
         }
         console.error(`[dream-skin] theme refresh failed: ${error.message}`);
+      }
+    }
+    if (applyAckToken) {
+      if (verifiedTargets > 0) {
+        await writeModeAck(options.operationAck, applyAckToken, "applied");
+      } else {
+        await writeModeAck(options.operationAck, applyAckToken, "failed");
       }
     }
     console.log(`[dream-skin] refreshed theme ${current.theme.id} (${current.timings.buildMs}ms)`);
@@ -2045,7 +2341,7 @@ async function runWatch(options) {
             setTimeout(() => {
               if (session.closed || controlOnly || mutationEpoch !== fallbackEpoch
                 || !record.needsLoadFallback) return;
-              applyToSession(session, current.payload).catch((error) => {
+              applyLoadedTheme(session, current).catch((error) => {
                 console.error(`[dream-skin] fallback reinject failed: ${error.message}`);
               });
             }, 0);
@@ -2053,7 +2349,7 @@ async function runWatch(options) {
           const initialOperation = activeOperation;
           recoveryOperation = initialOperation ? null : cycleRecovery;
           const pausing = initialOperation?.status === "pausing";
-          if (!controlOnly) {
+          if (!controlOnly && current.theme.mediaKind !== "video") {
             try {
               record.earlyScriptId = await registerEarlyForRecord(
                 record, current.payload, current.revision,
@@ -2064,16 +2360,22 @@ async function runWatch(options) {
               record.needsLoadFallback = true;
               console.error(`[dream-skin] early injection unavailable: ${error.message}`);
             }
+          } else if (!controlOnly) {
+            record.needsLoadFallback = true;
           }
           const probe = await waitForCodexProbe(session);
           if (!probe?.codex) {
             await removeEarly(record);
+            if (probe?.excludedPetSurface && !await cleanupExcludedSurface(session)) {
+              throw new Error("Excluded Pet surface cleanup did not verify");
+            }
             session.close();
             sessions.delete(target.id);
-            if (!rejected.has(target.id)) {
+            if (!probe?.excludedPetSurface && !rejected.has(target.id)) {
               console.error(`[dream-skin] rejected non-ChatGPT app target ${target.id}`);
               rejected.add(target.id);
             }
+            if (probe?.excludedPetSurface) rejected.delete(target.id);
             continue;
           }
           rejected.delete(target.id);
@@ -2101,18 +2403,12 @@ async function runWatch(options) {
           if (controlOnly || pausing) {
             continue;
           }
-          // ChatGPT rejects a loopback video URL assigned after its document
-          // has loaded. The early script is already registered above, so reload
-          // once to install the streamed source during document initialization.
-          const reloadForStreamedVideo = current.theme.mediaKind === "video"
-            && typeof current.theme.mediaUrl === "string";
-          if (reloadForStreamedVideo) {
-            await session.send("Page.reload", { ignoreCache: true });
-          }
-          const earlyApplied = reloadForStreamedVideo ? false : await session.evaluate(
+          const earlyApplied = current.theme.mediaKind === "video" ? false : await session.evaluate(
             `window.__CODEX_DREAM_SKIN_EARLY_APPLIED__ === ${JSON.stringify(current.revision)}`,
           );
-          if (!earlyApplied && !reloadForStreamedVideo) {
+          if (current.theme.mediaKind === "video") {
+            await applyLoadedTheme(session, current);
+          } else if (!earlyApplied) {
             if (controlOnly || mutationEpoch !== connectionEpoch) {
               await invalidateEarly(record);
               continue;
@@ -2120,7 +2416,7 @@ async function runWatch(options) {
             await session.evaluate(
               `window.__CODEX_DREAM_SKIN_EARLY_GENERATION__ = ${JSON.stringify(`fallback:${current.revision}`)}`,
             );
-            await applyToSession(session, current.payload);
+            await applyLoadedTheme(session, current);
           }
           if (controlOnly || mutationEpoch !== connectionEpoch) {
             await invalidateEarly(record);
@@ -2131,8 +2427,13 @@ async function runWatch(options) {
             Math.min(options.timeoutMs, 8000),
             current.theme.id,
             current.revision,
+            500,
+            current.theme.mediaKind,
           );
           if (!verification?.pass) throw new Error("Initial theme verification failed");
+          if (current.theme.mediaKind === "video" && initialOperation?.status === "applying") {
+            await writeModeAck(options.operationAck, initialOperation.token, "applied");
+          }
           if (recoveryOperation && !activeOperation
             && pauseRecovery?.token === recoveryOperation.token) {
             await presentOperationUi(
@@ -2153,6 +2454,10 @@ async function runWatch(options) {
           const recoveryStillCurrent = recoveryOperation && !activeOperation
             && pauseRecovery?.token === recoveryOperation.token;
           if (recoveryStillCurrent) recoveryFailedThisCycle = true;
+          if (current.theme.mediaKind === "video" && activeOperation?.status === "applying"
+            && record?.operationToken === activeOperation.token) {
+            await writeModeAck(options.operationAck, activeOperation.token, "failed");
+          }
           if (record?.operationToken && session && !session.closed) {
             if (recoveryStillCurrent) {
               await presentOperationUi(
@@ -2196,7 +2501,6 @@ async function runWatch(options) {
         : Promise.resolve(false)));
     await Promise.all([...sessions.values()].map((record) => removeEarly(record)));
     for (const record of sessions.values()) record.session.close();
-    await mediaServer.close();
   }
 }
 

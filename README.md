@@ -30,6 +30,15 @@
 > 不代表原项目作者的认可、合作或官方发布，也不应被表述为原项目的官方版本。若公开发布、
 > 再分发或商用，请自行复核原项目许可证及其中素材、商标和第三方内容的权利状态。
 
+## 当前本机版本快照（2026-09-04）
+
+- 当前已安装版本的源码已合并到 `main`，基于上游 v1.5.16；`codex/v1516-video-100m` 保留同步快照。本次仅同步源码，不发布或覆盖 Release 安装包。
+- 仅同步源码的合并提交可使用 `[skip release]` 标记：跳过该次自动发布，常规 CI 不受影响；未带标记的后续版本更新和手动发布仍沿用原流程。
+- macOS 本地视频上限为 **100 MiB（104,857,600 字节）**，不自动压缩。通过本地 CDP 分块传输并组装为 Blob，避免把整个视频塞进注入脚本；实现细节和内存、编码限制见[视频兼容性说明](./macos/README.md#video-backgrounds-current-compatibility-limit)。这一上限不适用于主题 ZIP 导入器。
+- 保留已确认的视频主题半透明样式：输入框背景 alpha 0.50，用户消息 0.30，代码卡片主体 0.30，Skill/命令浮层及卡片操作栏 0.40。数值表示背景不透明度，不降低文字透明度；静态主题不受这些视频专属规则影响。
+- 已知问题：实际使用中仍出现过“背景已应用，但 Switch theme failed / Injection verification failed”的情况。该验证问题尚未修复，不能把本次同步视为稳定性修复或所有热切换场景均通过验证。
+- 不包含个人视频、私有主题库或本机备份；源码不等于个人主题素材的分发许可。大视频支持为 macOS 功能，未据此宣称 Windows 同样支持大视频。
+
 ## 🤝 独家赞助
 
 <table>
@@ -52,7 +61,7 @@ Passion8 为本项目用户准备了专属福利：通过<a href="https://passio
 ## 直接安装
 
 普通用户只需先安装并退出一次官方 Codex / ChatGPT，然后从
-[GitHub Releases](https://github.com/Fei-Away/Codex-Dream-Skin/releases) 下载：
+[GitHub Releases](https://github.com/2698685648/codex-dream-skin-video/releases) 下载：
 
 - macOS：打开 `CodexDreamSkin-vX.Y.Z.dmg`，把 App 拖进 Applications。
 - Windows：双击 `CodexDreamSkin-Setup-vX.Y.Z.exe`，按安装向导完成。
@@ -162,7 +171,7 @@ macOS 菜单栏和 Windows 托盘都有「主题库 Gallery」和「在线 Studi
 - **真·可交互**：侧栏、建议卡、项目选择、输入框都是原生控件，不是整窗假截图贴上去
 - **真背景层**：一张 16:9 纯壁纸连续铺满整窗，首页突出氛围，任务页自动降低干扰
 - **可换图**：换一张喜欢的纯背景，自适应焦点、安全区和配色后变成你的主题
-- **视频背景（macOS 源码功能）**：支持 MP4 / WebM；当前桌面端实测可靠上限为 **10 MiB**。10–20 MiB 虽可导入但可能被运行时 URL 安全策略拒绝，详见 [视频兼容性说明](./macos/README.md#video-backgrounds-current-compatibility-limit)
+- **视频背景（macOS）**：支持不超过 **100 MiB（104,857,600 字节）**的本地 MP4 / WebM，不重新压缩；视频按 1 MiB 分块送入渲染器并组装为 CSP 允许的本地 Blob，热切换只在确认视频实际播放后报告成功。详见[视频兼容性说明](./macos/README.md#video-backgrounds-current-compatibility-limit)
 - **可存主题**：macOS 菜单栏与 Windows 系统托盘都能保存/切换本地主题
 - **一键换肤**：在 [DreamSkin.cc](https://dreamskin.cc) 上点一下，客户端核对来源与校验和后直接装上
 - **可导入主题包**：两端都可直接选择普通 `.zip`，安全校验后加入本地主题库
@@ -174,7 +183,7 @@ macOS 菜单栏和 Windows 托盘都有「主题库 Gallery」和「在线 Studi
 ### 普通用户：下载安装包
 
 不需要 clone 仓库，也不需要安装 Node.js 或运行 `.sh` / `.ps1`。从
-[GitHub Releases](https://github.com/Fei-Away/Codex-Dream-Skin/releases) 下载对应平台的最新安装包，
+[GitHub Releases](https://github.com/2698685648/codex-dream-skin-video/releases) 下载对应平台的最新安装包，
 按平台文档完成一次图形界面安装：
 
 | 平台 | 下载 | 安装说明 |

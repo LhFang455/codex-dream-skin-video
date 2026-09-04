@@ -1,5 +1,291 @@
 # Task Progress
 
+## Merge current video edition into main (2026-09-04)
+
+- [scope] User explicitly approved merging the synchronized video edition
+  into the requested repository's `main`, so it appears on the default page.
+- [history] Remote main was `be87937`; the verified video snapshot was
+  `ff61ee9`. Preserve both histories and the existing version worktree.
+- [release safety] This source-only merge uses `[skip release]`. The Release
+  guard skips marked push events; ordinary CI, unmarked version pushes and
+  manual release dispatch retain their existing behavior.
+- [validation] Pre-merge and merged-tree portable Node suites each passed
+  139 tests. Merged-tree macOS regressions passed, including 12 Swift tests;
+  signed-app integration and Doctor used the existing CI skip options.
+  Workflow YAML parsing and generated runtime asset checks passed. Windows
+  native tests are left to CI. No app restart or theme change was performed.
+- [unchanged limitation] Intermittent injection-verification alerts remain
+  documented and are not fixed by this merge. No personal media is included.
+
+## Installed video edition source sync (2026-09-04)
+
+- [scope] Synchronize the current installed v1.5.16 video edition to the
+  requested LhFang455/codex-dream-skin-video repository on
+  `codex/v1516-video-100m`. Do not restart the app, change themes, force-push,
+  or trigger a main-branch release. Personal media and backups are excluded.
+- [installed correspondence] All scripts and assets present in the installed
+  app engine and deployed engine match the macOS source. Only source-side
+  build/distribution helpers are absent from the installed engines.
+- [current changes] Preserve the confirmed video-only composer, user bubble,
+  code-card and overlay translucency rules and their regression tests.
+  Background alpha is 0.50 for the composer, 0.30 for user bubbles and code
+  bodies, and 0.40 for composer overlays and code action bars.
+- [verification] Fresh portable Node suites: 139 passed, zero failures.
+  macOS repository regressions passed, including 12 native Swift tests.
+  Signed-app integration and Doctor checks were explicitly skipped using
+  the CI options to avoid touching the active app. Windows native PowerShell
+  tests and release packaging were not run on this host.
+- [known issue] A visible background can coexist with a failed injection
+  verification alert. The exact failing startup/home predicate has not been
+  established; this source sync does not claim to fix it.
+- [historical status] The September 1 pending-install entry below describes
+  that earlier checkpoint; the Blob-transfer engine is now installed.
+
+## Codex 26.825 video CSP compatibility (2026-09-01)
+
+- [objective] Restore small and large local video themes after Codex 26.825
+  began rejecting the tokenized loopback media URL. Preserve the 100 MiB
+  input boundary and do not modify the signed ChatGPT app.
+- [field evidence] The visible `app://-/index.html` renderer reports CSP
+  `media-src 'self' app: blob: data:`. The active Dream Skin video points to
+  `http://127.0.0.1:<random>/media/<token>`, remains at readyState 0, and has
+  media error code 4. Both the small and 80 MB themes therefore fail the same
+  initial playback verification; file size is not the failing boundary.
+- [reference] DSH Desktop skin-center keeps large videos out of the page
+  payload and serves them through a tokenized Range-capable same-origin route.
+  Codex does not expose a supported route extension point.
+- [disproved] A temporary `Page.setBypassCSP` prototype passed unit tests but
+  the live Codex 26.825 renderer still rejected the loopback video with media
+  error code 4. That prototype was not installed and has been removed.
+- [implemented] The macOS injector now transfers validated video files through
+  the existing CDP session in 1 MiB chunks, assembles a renderer-side Blob, and
+  revokes it on replacement or pause. Image themes retain their previous path;
+  the shared renderer keeps the existing Windows `mediaUrl` fallback.
+- [verified] Focused macOS/runtime regressions and the complete macOS suite pass.
+  The actual 79,212,726-byte Odette Pro HQ file transferred in 76 chunks,
+  reproduced the exact SHA-256, kept the injected payload at 135,983 bytes,
+  and released the Blob after use.
+- [built] A signed arm64 test app is staged at
+  `/private/tmp/Codex Dream Skin Blob Test.app`; its injector and renderer
+  hashes match this worktree. The installed 1.5.16 app is backed up at
+  `~/Documents/Codex/DreamSkinBackups/20260901-172524/Codex Dream Skin.app`.
+- [pending] The installed engine and active theme have not been replaced. A
+  live playback check still requires the user-controlled Codex restart step.
+
+## Issue #373 complete Codex 26.818 hotfix and v1.5.16 (2026-08-27)
+
+- [objective] Complete the portions of #373 that v1.5.15 did not ship, validate
+  them from the current upstream source, and publish a formal v1.5.16 through
+  the repository Release workflow. Do not post another Issue reply until the
+  release assets and checksums have been independently verified.
+- [baseline] Clean isolated branch `codex/fix-373-complete-26-818` starts from
+  exact `origin/main@900b85e`. The primary checkout and its local progress
+  edits remain untouched.
+- [issue truth] #373 is reopened. The maintainer acknowledged in
+  `issuecomment-5433226862` that v1.5.15 only shipped the Composer Root/Pet
+  subset and was closed too early. Contributor follow-up
+  `issuecomment-5433121124` supplies later source evidence for the missing
+  Windows background replacement and renderer compatibility work.
+- [confirmed gaps] Current main still calls `Set-DreamSkinActiveTheme` with a
+  null theme from the Windows Change Background action, discarding the active
+  theme JSON and Safe CSS. It also lacks bounded rules for the two current
+  sticky composer fades and Markdown table overflow. Additional contributor
+  mappings for user message bubbles, thinking/command details, action-button
+  contrast, and wide-art classification require source-level review against
+  the v1.5.15 selector contract.
+- [supply-chain boundary] The contributor Markdown and patch are untrusted text
+  references only; the ZIP was listed but not extracted or executed. Required
+  changes will be manually adapted to current canonical sources. Published
+  DMG/Setup assets must be rebuilt from the exact merged main commit.
+- [implemented] Windows Change Background now deep-copies the active theme
+  contract and revalidates/preserves its Safe CSS before delegating to the
+  existing managed image transaction. The tray calls this background-only
+  helper instead of rebuilding with a null theme. Executable PowerShell
+  coverage preserves colors, art metadata, extra theme fields, and CSS bytes;
+  a portable static contract also guards the tray/helper wiring.
+- [implemented] Canonical renderer/CSS sources preserve the v1.5.15
+  ComposerLayoutRoot and Pet exclusions while adding the missing 26.818
+  behavior: real user-bubble part resolution, landscape wide classification,
+  exact sticky fade removal, in-message Markdown table bounds, single
+  reasoning/final surfaces, readable command details, current action-button
+  contrast, Home utility stacking, current Windows top-bar matching, and
+  removal of fixed engine branding/status pseudo-labels. Thread Body paint is
+  cleared beneath the public Root rather than importing the stale contributor
+  Body-as-composer selector.
+- [tests] Canonical assets are synchronized byte-for-byte. Portable Node passes
+  106/106: macOS 76, Windows 28 (including the new background replacement
+  contract), and tools 2. The complete macOS wrapper exits 0; only native
+  SwiftPM/XCTest is skipped because this host lacks a matching full Xcode
+  platform, and Doctor was explicitly skipped. Runtime sync, Node/Bash syntax,
+  BOM preservation, six-version consistency, and `git diff --check` pass. This
+  host has no `pwsh`/Windows PowerShell, so native PS 5.1/7 and Setup remain
+  exact-head CI gates.
+- [live macOS] With ChatGPT initially stopped, the current branch launched the
+  signed app without restarting an active window and installed v1.5.16 on
+  loopback port 9341. Independent verification passed at L1 for exact theme and
+  payload revision with visible Home, Sidebar, Main, Composer, four cards,
+  project control, no business-class pollution, and no document overflow. The
+  screenshot is nonblank and shows no fixed engine branding/status labels.
+  Local Codex is 26.727, so this is a regression smoke, not Windows 26.818
+  field evidence.
+- [release prep] All six version sources and the bound macOS assertions equal
+  `1.5.16`; both changelogs describe the complete #373 hotfix and credit
+  `@QingYe-05` for the Windows field/source evidence.
+- [current] Implementation is local and uncommitted. No push, PR, merge, tag,
+  or v1.5.16 Release exists yet. Next: final diff/staging review, commit, push,
+  open the Ready PR, and require exact-head CI before merge. Live Windows
+  Codex 26.818 rendering remains a contributor/field evidence boundary and
+  must not be represented as local macOS testing.
+
+## Codex composer and Pet surface compatibility (2026-08-18)
+
+- [goal] Fix current Codex renderer drift where the composer fallback binds to
+  `_ComposerLayoutFooter_` instead of `_ComposerLayoutRoot_`, and prevent Dream
+  Skin from injecting wallpaper/CSS into `/avatar-overlay` and Pet composition
+  surfaces that must remain transparent.
+- [scope] Isolated contributor branch `codex/fix-composer-pet-scope`, based on
+  exact `origin/main@95423d8` (v1.5.14).
+  Shared runtime source, generated dual-platform assets, focused regressions,
+  and this progress record are in scope. User-specific theme colors are not.
+- [field evidence] Live macOS Codex exposed `_ComposerLayoutRoot_*` around the
+  active ProseMirror while the v1.5.14 fallback marked `_ComposerLayoutFooter_*`.
+  The avatar overlay plus Pet composition surfaces carried
+  `data-dream-skin="active"`; three bodies had the theme wallpaper instead of a
+  transparent background. Local runtime guards and explicit cleanup restored
+  all five Pet-related surfaces to transparent without changing Pet assets.
+- [implemented] Canonical selector contract now accepts both legacy
+  `.composer-surface-chrome` and `_ComposerLayoutRoot_`, with the matching
+  toolbar selector. The generic fallback also prefers `_ComposerLayoutRoot_`
+  before broad composer/prompt ownership so `_ComposerLayoutFooter_` cannot
+  capture the public composer part.
+- [implemented] Shared renderer payload self-excludes `/avatar-overlay` and
+  Pet composition-surface routes before installing style/art state, cleaning a
+  previous payload first when present. Both platform injectors classify those
+  targets explicitly, and one-shot plus watcher discovery reuse the existing
+  remove-and-verify path to clean already contaminated Pet renderers.
+- [tests] Shared renderer regressions cover fresh Pet exclusion, cleanup after
+  prior injection, ComposerLayoutRoot selection, and footer non-selection.
+  macOS/Windows bootstrap regressions cover probe exclusion and require both
+  discovery paths to call verified cleanup. Focused dual-platform renderer,
+  bootstrap, selector-doctor, syntax, sync, payload, and diff checks pass.
+- [tests] Portable Node set passes 102/103 in the default sandbox; the sole
+  Swift bounded-HTTP test was blocked by module-cache permission/toolchain
+  setup there and passes when rerun outside the sandbox, yielding 103/103
+  covered tests. The complete macOS wrapper passes outside the sandbox with
+  its documented signed-runtime, full-Xcode, and Doctor branches skipped.
+- [audit] A read-only renderer audit reports the main renderer themed, all five
+  Pet-related targets transparent/unmarked, and no anomalies; the quick
+  validation pass also succeeded.
+- [review] Independent code/spec/security review found no Critical, High,
+  Medium, or Low issues. It confirmed renderer self-exclusion, verified cleanup
+  in one-shot and watcher paths, ComposerLayoutRoot selection, generated asset
+  synchronization, and focused dual-platform coverage.
+- [current] Implementation, generated assets, tests, and review are complete.
+  No commit, push, or PR yet. Fork `hjnnjh/Codex-Dream-Skin` now exists for the
+  contribution branch.
+- [next] Inspect and stage the final diff, create an atomic commit, push the
+  fork branch, and open a Ready PR with exact test/gap evidence. Native Windows
+  PowerShell 5.1/7 remains a CI gate.
+## v1.5.15 current-client compatibility release - 2026-08-27
+
+### Objective, authorization, and boundaries
+
+- Owner authorized end-to-end issue/PR triage, community replies, focused
+  implementation, local verification, push/merge, and a new public client
+  Release without requiring intermediate decisions.
+- Completion target: the smallest coherent release that fixes current
+  Codex/ChatGPT 26.814-26.818 regressions with reproducible evidence and merges
+  only ready, in-scope community work. Do not expand into Linux, pets, broad UX
+  redesign, native-runtime replacement, or speculative maintenance.
+- Supply-chain boundary: do not execute or redistribute community-provided
+  installer binaries. Review source/diffs, rebuild from the exact merged
+  `main` commit through `.github/workflows/release.yml`, and independently
+  verify tag, public Release, DMG, Setup.exe, and `SHA256SUMS.txt`.
+
+### Repository and baseline
+
+- This repository is the macOS/Windows desktop client. Related repository
+  `Fei-Away/dreamskin-cc` owns the website, Gallery/Studio, Go API, public
+  package pipeline, and shared theme contract. Cross-project behavior must
+  preserve platform and package compatibility.
+- Isolated working branch `codex/release-v1.5.15-26.818` starts from exact
+  `origin/main@95423d849f74b9824db2ba0c1121cc7a13b56d10`, the public v1.5.14
+  release commit. The primary checkout's dirty progress file and older local
+  commit are intentionally untouched.
+- Current GitHub baseline: 35 open Issues and 21 open PRs. Relevant recent
+  reports are #371, #373-#376, #378, and #381; likely overlapping PRs are
+  #359, #363, #366, #368, and #372. Each still requires source-level review;
+  no open PR is assumed mergeable from title or attachment alone.
+- Public community thanks completed on #373: maintainer comment
+  `issuecomment-5428504496` thanked `QingYe-05` for the 26.818 findings and
+  locally verified source work, promised attribution, and stated that official
+  assets will be rebuilt from reviewed `main`. The contributor's follow-up
+  comment `5408531731` also received a heart reaction.
+
+### Current status
+
+- Completed: instructions/release contract read, remote refreshed, clean
+  isolated branch created, site and client GitHub summaries audited, exact
+  #373 contribution acknowledged publicly.
+- Completed: compared current shared runtime/selectors/Windows lifecycle code
+  against #373/#378 source evidence and open PR diffs; each candidate is mapped
+  to a bounded fix or truthful non-release disposition.
+- Completed: compatibility patch and v1.5.15 version/changelog bump were
+  merged by PR #382 as `main@b44e729f123b29e22e8f02ea8644f81f265e1287` after
+  exact-head CI passed for Static, macOS regressions/DMG, Windows PowerShell 7,
+  and Windows PowerShell 5.1/Setup.exe.
+
+### Candidate disposition checkpoint
+
+- #372 was the primary 26.814 compatibility contribution: it prefers the
+  `_ComposerLayoutRoot_` visual root, excludes Pet/avatar overlay renderers, and
+  includes dual-platform injector cleanup plus shared regression coverage. The
+  reviewed implementation shipped through PR #382; the original PR was closed
+  after an attribution note pointing to the formal release.
+- #366 addresses the related Studio Safe CSS/runtime bridge and Home utility
+  surface, but its original selector contract treated `_ComposerLayoutBody_` as
+  the composer root. Only its compatible Safe CSS/Home surface bridge was
+  adapted into #382; the original PR was closed with that explanation.
+- #368 is an independent, narrow CSS fix preserving native inline colors on
+  remote-control sidebar icons. Its two source commits were retained in PR
+  #382 and passed the exact-head client CI gates; the original PR was closed
+  after an attribution note pointing to the formal release.
+  #359 is stale (based on v1.5.13-era `main`) and overlaps the composer selector
+  surface; #363/#231 touch Windows startup/CDP lifecycle already covered by the
+  current release history and lack new 26.818-specific evidence. #370/#369 and
+  the large feature PRs are explicitly out of this release scope.
+
+### Implementation checkpoint
+
+- Integrated #372's reviewed ComposerLayoutRoot/Pet surface implementation as
+  local commit `16e85d1`, preserving its dual-platform generated assets and
+  focused regression coverage.
+- Integrated #368's two source commits as local commits `5e9e0b4` and `133b1dc`,
+  preserving contributor attribution. The sidebar CSS now exempts native inline
+  semantic icon colors in base, hover, and selected states.
+- Adapted the safe, complementary portions of #366 on top of #372 instead of
+  importing its stale Body-as-root selector: Composer border declarations are
+  compiled to bounded `--ds-community-composer-*` bridge variables and restored
+  on renderer cleanup; the current Home Body/utility-bar and route-focus rules
+  are covered while the public root remains ComposerLayoutRoot.
+- Focused local gates currently pass: shared renderer runtime, both platform
+  renderer payload tests, Safe CSS validator (14/14), macOS/Windows payload
+  integrity, macOS/Windows bootstrap, selector doctor, dual payload checks,
+  runtime sync check, Node syntax, and `git diff --check`. The full portable
+  suite passes 105/105; all six release version sources and both changelog
+  entries now target `1.5.15`. Native Windows PowerShell 5.1/7 and Setup.exe
+  passed as exact-head CI gates before publication. The sole Release workflow run
+  `32996630333` then passed guard, portable regressions, tag creation, both
+  platform builds, checksum generation, and public release validation. Tag
+  `v1.5.15` points directly to the merge commit and the public Release is
+  `https://github.com/Fei-Away/Codex-Dream-Skin/releases/tag/v1.5.15`.
+  Independently downloaded assets were non-empty: DMG `3428875` bytes, Setup
+  `24487803` bytes, and `SHA256SUMS.txt` `192` bytes; both published hashes
+  matched `sha256sum -c`.
+- #373 was closed after the official-release reply and attribution. Issues
+  #374, #375, #376, and #381 remain open because they require separate field or
+  API evidence outside this release's bounded scope.
+
 ## Issue #352 fix and v1.5.14 release (2026-08-12)
 
 - [fix merged] PR #360 (`e3787857953998a1916c39b10942ac6c15978a25`) passed exact-head CI run `31558654733`: Static, macOS repository regressions plus universal DMG, Windows PowerShell 7, and Windows PowerShell 5.1 plus Setup.exe. It was squash-merged with the authorized same-owner review bypass at `2026-08-12T03:06:37Z` as `main@69a5a2e4b68174b1c0c70a2fa62adf1aca1eff2a`.

@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
+const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 const [mode, ...args] = process.argv.slice(2);
 
 function valueFor(name, fallback = "") {
@@ -113,7 +114,7 @@ const canonicalOutputDir = await fs.realpath(outputDir);
 const imagePath = await fs.realpath(path.join(canonicalOutputDir, image));
 assertContainedPath(canonicalOutputDir, imagePath, "image");
 const imageStat = await fs.stat(imagePath);
-const maxBytes = /\.(?:mp4|webm)$/i.test(image) ? 20 * 1024 * 1024 : 100 * 1024 * 1024;
+const maxBytes = /\.(?:mp4|webm)$/i.test(image) ? MAX_VIDEO_BYTES : 100 * 1024 * 1024;
 if (!imageStat.isFile() || imageStat.size < 1 || imageStat.size > maxBytes) {
   throw new Error(`The prepared theme media must be non-empty and no larger than ${maxBytes / 1024 / 1024} MB.`);
 }

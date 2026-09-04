@@ -11,32 +11,38 @@ const css = readFileSync(join(root, "assets", "dream-skin.css"), "utf8");
 const renderer = readFileSync(join(root, "assets", "renderer-inject.js"), "utf8");
 const injector = readFileSync(join(root, "scripts", "injector.mjs"), "utf8");
 
-test("video hot apply completes the page operation after starting its watcher", () => {
+test("video hot apply keeps a healthy watcher and waits for playback evidence", () => {
+  const videoBranch = common.match(/case "\$theme_media" in([\s\S]*?)\n  esac/);
+  assert.ok(videoBranch, "hot apply must have a video-media branch");
+  assert.doesNotMatch(
+    videoBranch[1],
+    /stop_recorded_injector/,
+    "video switching must not kill the loopback server that owns the current page URL",
+  );
+  assert.match(
+    videoBranch[1],
+    /wait_for_video_apply_ack/,
+    "video switching must wait for the watcher to confirm real playback",
+  );
+});
+
+test("video hot apply stages a refresh without replacing the healthy watcher", () => {
   const videoBranch = common.match(/case "\$theme_media" in([\s\S]*?)\n  esac/);
   assert.ok(videoBranch, "hot apply must have a video-media branch");
   assert.match(
     videoBranch[1],
-    /write_operation_state success[\s\S]*?finish_client_operation "\$port" success/,
-    "a persisted success state alone leaves the page's applying overlay visible",
+    /touch "\$THEME_DIR\/theme\.json"[\s\S]*?wait_for_video_apply_ack/,
+    "the stable watcher must observe the staged video before success is reported",
   );
 });
 
-test("video hot apply refreshes the page after rotating its local media URL", () => {
-  const videoBranch = common.match(/case "\$theme_media" in([\s\S]*?)\n  esac/);
-  assert.ok(videoBranch, "hot apply must have a video-media branch");
-  assert.match(
-    videoBranch[1],
-    /launch_injector_daemon[\s\S]*?touch "\$THEME_DIR\/theme\.json"/,
-    "a replacement video server needs a theme refresh so the renderer receives its new URL",
-  );
-});
-
-test("the watcher reloads a loaded page before installing a streamed video URL", () => {
+test("the watcher transfers a Blob into a loaded page without navigation", () => {
   assert.match(
     injector,
-    /current\.theme\.mediaKind === "video"[\s\S]*?typeof current\.theme\.mediaUrl === "string"[\s\S]*?Page\.reload/,
-    "a hot video URL must be installed during document initialization, not assigned into an already-loaded page",
+    /current\.theme\.mediaKind === "video"[\s\S]*?applyLoadedTheme\(session, current\)/,
+    "a video theme must install a CSP-compatible Blob into the current document",
   );
+  assert.doesNotMatch(injector, /reloadForStreamedVideo/);
 });
 
 test("startup completes the page operation after verification", () => {
@@ -47,11 +53,11 @@ test("startup completes the page operation after verification", () => {
   );
 });
 
-test("the canonical Codex app root remains a trusted operation target", () => {
-  assert.match(injector, /const canonicalRoot = location\.protocol === 'app:'[\s\S]*?!location\.search/,
-    "the root page needs a stable fallback while Codex loads its shell markers");
-  assert.match(injector, /markers\.generic \|\| canonicalRoot/,
-    "the canonical root must be accepted alongside the normal shell markers");
+test("an unbranded app root cannot bypass the Codex identity markers", () => {
+  assert.doesNotMatch(injector, /markers\.generic \|\| canonicalRoot/,
+    "an app:// root without stable Codex markers must remain outside the target set");
+  assert.match(injector, /return Boolean\(main && input && branded\)/,
+    "generic fallback anchors must retain the stable Codex branding requirement");
 });
 
 test("video surfaces remain clear instead of using blur", () => {
@@ -93,12 +99,36 @@ test("video mode clears semantic overlays and search controls without changing i
     "the diff list’s nested black surface must be clear");
   assert.match(finalOverrides, /group\\\/home-suggestions button[\s\S]*?\/ \.28/,
     "the directly visible home suggestion cards must remain semi-transparent");
-  assert.match(finalOverrides, /\.composer-surface-chrome \{[\s\S]*?background: transparent/,
-    "the directly visible composer shell must be clear");
-  assert.match(finalOverrides, /\[class\*="_ComposerLayoutRoot_"\][\s\S]*?background: transparent/,
-    "the opaque native composer root must be removed in video mode");
+  assert.match(finalOverrides, /\[class\*="_ComposerLayoutRoot_"\]\s*\{[^}]*?\/ \.50[^}]*?box-shadow:/,
+    "the native composer root must keep a 50% tint and shadow over video");
   assert.match(finalOverrides, /\[role="dialog"\][\s\S]*?input\[type="text"\][\s\S]*?\/ \.38/,
     "slash and Skill search inputs must stay semi-transparent");
+});
+
+test("video conversation surfaces stay lighter than their generic opaque cards", () => {
+  const finalOverrides = css.slice(css.lastIndexOf("Video-only overlay and search transparency"));
+  assert.match(finalOverrides,
+    /data-local-conversation-user-anchor\][^{}]*?\[data-ds-part="message"\]\s*\{[^}]*?\/ \.30/,
+    "user message bubbles should use a 30% video-only tint");
+  assert.match(finalOverrides,
+    /data-response-annotation-conversation[\s\S]*?\/ \.26[\s\S]*?box-shadow:/,
+    "assistant message surfaces should use a 26% video-only tint");
+  assert.match(finalOverrides,
+    /data-local-conversation-item-target-ids[\s\S]*?\/ \.30[\s\S]*?box-shadow:/,
+    "tool and status surfaces should use a 30% video-only tint");
+});
+
+test("video composer overlays and Skill cards remain translucent", () => {
+  const finalOverrides = css.slice(css.lastIndexOf("Video-only overlay and search transparency"));
+  assert.match(finalOverrides,
+    /data-composer-overlay-floating-ui="true"\] > \*\s*\{[^}]*?\/ \.40/,
+    "composer add-content, slash, and Skill overlays should use a 40% tint");
+  assert.match(finalOverrides,
+    /\[class\*="_CodeBlock_"\]\s*\{[^}]*?\/ \.30/,
+    "Skill and code card bodies should use a 30% tint");
+  assert.match(finalOverrides,
+    /\[class\*="_CodeBlock_"\] \[class\*="_StickyActionBar_"\]\s*\{[^}]*?\/ \.40[^}]*?background-image: none/,
+    "Skill and code card action bars should use a 40% tint without an opaque gradient");
 });
 
 test("a completed external apply closes an operation opened before the target connected", () => {

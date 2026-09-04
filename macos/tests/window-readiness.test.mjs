@@ -57,6 +57,40 @@ const baseRenderer = {
 assert.equal(readyNativeWindow.status, "ready");
 assert.equal(assessRendererVerification(baseRenderer, readyNativeWindow, exactPayload).pass, true);
 
+const videoExpected = { ...exactPayload, expectedMediaKind: "video" };
+assert.equal(
+  assessRendererVerification({ ...baseRenderer, video: null }, readyNativeWindow, videoExpected).pass,
+  false,
+  "A video theme must not verify before its video element is present.",
+);
+const playableVideo = {
+  present: true,
+  readyState: 4,
+  videoWidth: 1920,
+  videoHeight: 1080,
+  paused: false,
+  currentTime: 1.2,
+  progressing: true,
+  errorCode: 0,
+};
+assert.equal(
+  assessRendererVerification({ ...baseRenderer, video: playableVideo }, readyNativeWindow, videoExpected).pass,
+  true,
+  "A decoded and progressing video must satisfy the video verification gate.",
+);
+for (const video of [
+  { ...playableVideo, videoWidth: 0 },
+  { ...playableVideo, errorCode: 3 },
+  { ...playableVideo, paused: true },
+  { ...playableVideo, progressing: false },
+]) {
+  assert.equal(
+    assessRendererVerification({ ...baseRenderer, video }, readyNativeWindow, videoExpected).pass,
+    false,
+    "Invalid or non-progressing video state must not report success.",
+  );
+}
+
 // Codex 26.721.x sometimes renders game-source/home suggestions before
 // home-icon. In that interval homeRoute is already a real [role=main], so
 // verification must use it when the stricter home-route selector is late.

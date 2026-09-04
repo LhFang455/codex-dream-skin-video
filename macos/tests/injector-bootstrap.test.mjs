@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
-import { earlyPayloadFor } from "../scripts/injector.mjs";
+import { cleanupExcludedSurface, earlyPayloadFor } from "../scripts/injector.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const injectorPath = path.resolve(here, "../scripts/injector.mjs");
@@ -149,8 +149,14 @@ const liveProbePayload = vm.runInNewContext(`\`${probeTemplate}\``, {
 const runLiveProbe = ({
   protocol = "app:", settingsPanel: hasSettingsPanel = false,
   genericMain = false, genericInput = false, branding = false,
+  pathname = "/index.html", initialRoute = "",
 } = {}) => vm.runInNewContext(liveProbePayload, {
-  location: { protocol },
+  location: {
+    protocol,
+    pathname,
+    search: initialRoute ? `?initialRoute=${encodeURIComponent(initialRoute)}` : "",
+  },
+  URLSearchParams,
   document: {
     querySelector(selector) {
       if (selector === "[selector-settings-panel]") return hasSettingsPanel ? {} : null;
@@ -173,6 +179,25 @@ assert.equal(runLiveProbe({ genericMain: true, genericInput: true }).codex, fals
   "The live probe must reject an unbranded generic app target.");
 assert.equal(runLiveProbe({ genericMain: true, genericInput: true, branding: true }).codex, true,
   "The live probe may accept generic anchors only with the stable Codex branding marker.");
+const avatarOverlayProbe = runLiveProbe({ settingsPanel: true, initialRoute: "/avatar-overlay" });
+assert.equal(avatarOverlayProbe.excludedPetSurface, true);
+assert.equal(avatarOverlayProbe.codex, false,
+  "The avatar overlay must never be treated as the primary Codex renderer.");
+const petCompositionProbe = runLiveProbe({
+  settingsPanel: true, pathname: "/avatar-overlay-composition-surface.html",
+});
+assert.equal(petCompositionProbe.excludedPetSurface, true);
+assert.equal(petCompositionProbe.codex, false,
+  "Pet composition surfaces must stay outside the Dream Skin target set.");
+const cleanupEvaluations = [];
+assert.equal(await cleanupExcludedSurface({
+  async evaluate(expression) { cleanupEvaluations.push(expression); return true; },
+}), true, "Excluded Pet cleanup must remove and verify stale renderer state.");
+assert.equal(cleanupEvaluations.length, 2);
+assert.match(cleanupEvaluations[0], /__CODEX_DREAM_SKIN_DISABLED__/);
+assert.match(cleanupEvaluations[1], /hasAttributes/);
+assert.ok((source.match(/probe\?\.excludedPetSurface && !await cleanupExcludedSurface/g) || []).length >= 2,
+  "One-shot and watcher discovery must both clean excluded Pet targets.");
 assert.match(identityProbeSource, /selectorLiteral\("settings-panel"\)/,
   "The live probe must retain the current Settings structural marker.");
 assert.match(identityProbeSource, /return Boolean\(main && input && branded\)/,
@@ -192,9 +217,11 @@ assert.match(
 );
 assert.match(
   source,
-  /const earlyApplied = reloadForStreamedVideo \? false : await session\.evaluate\([\s\S]*if \(!earlyApplied && !reloadForStreamedVideo\) \{[\s\S]*applyToSession/,
-  "The watcher must use the normal early-install guard for images and avoid a second payload install after a streamed-video reload.",
+  /const earlyApplied = current\.theme\.mediaKind === "video" \? false : await session\.evaluate\([\s\S]*if \(current\.theme\.mediaKind === "video"\) \{[\s\S]*applyLoadedTheme\(session, current\)[\s\S]*else if \(!earlyApplied\)/,
+  "The watcher must not run the full payload twice after an image early install, while video uses the Blob-aware apply path.",
 );
+assert.doesNotMatch(source, /reloadForStreamedVideo/,
+  "Blob-backed video switching must not depend on a page reload.");
 assert.match(
   source,
   /const suggestionLabelColorsMatch = visibleSuggestionLabels\.every\(/,
