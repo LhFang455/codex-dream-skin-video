@@ -1,4 +1,4 @@
-# Codex Dream Skin
+# Codex Dream Skin Video
 
 <p align="center">
   <strong>中文</strong> · <a href="./README.en.md">English</a>
@@ -23,23 +23,28 @@
   非 OpenAI 官方产品。不修改 <code>.app</code> / <code>app.asar</code> / WindowsApps。
 </p>
 
-> ## 来源与个人使用声明
+> ## 来源、致谢与许可
 >
 > 本仓库基于 [Fei-Away/Codex-Dream-Skin](https://github.com/Fei-Away/Codex-Dream-Skin)
-> 修改，保留原项目的 MIT 许可证与版权声明。本修改版本仅供仓库维护者个人、非营利使用；
-> 不代表原项目作者的认可、合作或官方发布，也不应被表述为原项目的官方版本。若公开发布、
-> 再分发或商用，请自行复核原项目许可证及其中素材、商标和第三方内容的权利状态。
+> 派生，基于上游 v1.5.16。感谢 Fei-Away 及原项目贡献者提供主题引擎、双端客户端、主题库集成和文档。
+> [LhFang455](https://github.com/LhFang455) 在此基础上开发 macOS 视频背景支持，并维护视频专属样式与兼容修复。
+> 原项目介绍、社区入口、素材署名及历史说明继续保留；它们不代表本分支独立开发的成果。
+> 保留原项目 [MIT 许可证](./LICENSE)与[版权及第三方声明](./macos/NOTICE.md)。个人非营利使用是维护者的使用意图，
+> **不是对 MIT 的额外限制**；第三方视频、图片、肖像和商标不因此获得授权。本分支不代表上游或 OpenAI 的认可、合作或官方发布。
 
-## 当前本机版本快照（2026-09-04）
+## 视频版当前源码（2026-09-20）
 
-- 当前已安装版本的源码已合并到 `main`，基于上游 v1.5.16；`codex/v1516-video-100m` 保留同步快照。本次仅同步源码，不发布或覆盖 Release 安装包。
+- 本仓库是 [codex-dream-skin-video](https://github.com/LhFang455/codex-dream-skin-video)，基于上游 v1.5.16；当前源码包含视频扩展及后续兼容修复。本次仅同步源码，不发布或覆盖 Release 安装包；旧安装包不一定包含本页新增功能，请核对其发布说明，或按下文从源码运行。
 - 仅同步源码的合并提交可使用 `[skip release]` 标记：跳过该次自动发布，常规 CI 不受影响；未带标记的后续版本更新和手动发布仍沿用原流程。
 - macOS 本地视频上限为 **100 MiB（104,857,600 字节）**，不自动压缩。通过本地 CDP 分块传输并组装为 Blob，避免把整个视频塞进注入脚本；实现细节和内存、编码限制见[视频兼容性说明](./macos/README.md#video-backgrounds-current-compatibility-limit)。这一上限不适用于主题 ZIP 导入器。
 - 保留已确认的视频主题半透明样式：输入框背景 alpha 0.50，用户消息 0.30，代码卡片主体 0.30，Skill/命令浮层及卡片操作栏 0.40。数值表示背景不透明度，不降低文字透明度；静态主题不受这些视频专属规则影响。
-- 已知问题：实际使用中仍出现过“背景已应用，但 Switch theme failed / Injection verification failed”的情况。该验证问题尚未修复，不能把本次同步视为稳定性修复或所有热切换场景均通过验证。
+- 兼容修复：统一视频首页建议按钮与子元素的文字颜色；针对 Codex 26.915.31945 恢复首页欢迎卡片背景 alpha 0.30、项目选择顶栏 alpha 0.50，兼容新旧 class 与语义属性。保持文字不透明，不改变静态主题。
+- 验证边界：本机 26.915.31945 首页注入与视频播放校验通过；回归测试覆盖以上规则。尚未完成可靠的完整冷启动复测，不能承诺消除所有首次启动失败。已增加失败检查项输出，但下一次启动仍可能覆盖错误日志，复现后应先保存日志再重试。
 - 不包含个人视频、私有主题库或本机备份；源码不等于个人主题素材的分发许可。大视频支持为 macOS 功能，未据此宣称 Windows 同样支持大视频。
 
 ## 🤝 独家赞助
+
+> 以下赞助介绍与链接保留自上游原文，描述的是上游项目的赞助关系；本分支不据此声称获得赞助，也未独立核验服务商的宣传承诺。
 
 <table>
 <tr>
@@ -61,7 +66,7 @@ Passion8 为本项目用户准备了专属福利：通过<a href="https://passio
 ## 直接安装
 
 普通用户只需先安装并退出一次官方 Codex / ChatGPT，然后从
-[GitHub Releases](https://github.com/2698685648/codex-dream-skin-video/releases) 下载：
+[本分支 Releases](https://github.com/LhFang455/codex-dream-skin-video/releases) 下载已有安装包（是否含视频功能请核对发布说明）：
 
 - macOS：打开 `CodexDreamSkin-vX.Y.Z.dmg`，把 App 拖进 Applications。
 - Windows：双击 `CodexDreamSkin-Setup-vX.Y.Z.exe`，按安装向导完成。
@@ -70,6 +75,8 @@ Passion8 为本项目用户准备了专属福利：通过<a href="https://passio
 [macOS 安装说明](./docs/install-macos.md) / [Windows 安装说明](./docs/install-windows.md)。
 
 ## 主题库与社区
+
+本节保留上游社区介绍；DreamSkin.cc 是上游项目的主题平台，并非本视频分支新建的服务。
 
 <p align="center">
   <a href="https://dreamskin.cc">
@@ -183,7 +190,7 @@ macOS 菜单栏和 Windows 托盘都有「主题库 Gallery」和「在线 Studi
 ### 普通用户：下载安装包
 
 不需要 clone 仓库，也不需要安装 Node.js 或运行 `.sh` / `.ps1`。从
-[GitHub Releases](https://github.com/2698685648/codex-dream-skin-video/releases) 下载对应平台的最新安装包，
+[本分支 Releases](https://github.com/LhFang455/codex-dream-skin-video/releases) 下载对应平台已有安装包（当前源码改动不等于已发布），
 按平台文档完成一次图形界面安装：
 
 | 平台 | 下载 | 安装说明 |
@@ -193,6 +200,18 @@ macOS 菜单栏和 Windows 托盘都有「主题库 Gallery」和「在线 Studi
 
 安装后从菜单栏（macOS）或系统托盘（Windows）使用。更新时下载新安装包覆盖安装，主题和图片会保留；
 未签名的新下载文件在个别系统上仍可能再次出现一次安全提示，文档列出了放行方法。
+
+### 使用视频背景（macOS 视频版）
+
+1. 使用包含视频功能的本分支构建，打开 **Codex Dream Skin** 菜单栏工具。
+2. 选择 **主题 → 选择视频背景…**，选取本地 MP4 / WebM（非空，最大 100 MiB）。
+3. 等待应用完成；视频静音循环播放，主题会保存到本地主题库，之后可从“已保存的主题”切换。
+4. 要回到图片，使用“更换背景图”或选择已保存的图片主题；要停止主题，使用暂停或恢复官方外观入口。
+
+视频不会自动压缩，也不会上传到主题网站。大文件和高分辨率视频会增加内存、GPU 与电量消耗；
+优先尝试较短的 H.264 MP4，保留原文件。扩展名与大小合格并不保证所有编码均可解码。
+**视频导入不是 ZIP 导入**：原有主题 ZIP 的图片格式和大小限制不变，也不表示 Windows 已支持视频。
+从源码安装、命令行示例、故障处理见 [macOS 视频使用说明](./macos/README.md#video-backgrounds-current-compatibility-limit)。
 
 ### 导入下载的主题
 
@@ -255,7 +274,7 @@ macOS 菜单栏和 Windows 托盘都有「主题库 Gallery」和「在线 Studi
 ## 许可与声明
 
 - 见 [`macos/LICENSE`](./macos/LICENSE)（MIT）与 [`macos/NOTICE.md`](./macos/NOTICE.md)
-- 本仓库是基于 [Fei-Away/Codex-Dream-Skin](https://github.com/Fei-Away/Codex-Dream-Skin) 的个人非营利修改版本；原项目许可证要求保留其版权和许可文本
+- 本仓库是基于 [Fei-Away/Codex-Dream-Skin](https://github.com/Fei-Away/Codex-Dream-Skin) 的独立视频扩展分支；保留原项目版权和许可文本，不对 MIT 增加非商业限制
 - 非 OpenAI 官方产品；Codex 及相关权利归其权利人
 - 随仓库预设及效果图中的人物 / IP 素材仅作主题示意；商用或公开再分发请自行确认肖像、素材与商标权利
 

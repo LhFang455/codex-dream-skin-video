@@ -1,4 +1,4 @@
-# Codex Dream Skin
+# Codex Dream Skin Video
 
 <p align="center">
   <a href="./README.md">中文</a> · <strong>English</strong>
@@ -23,7 +23,43 @@
   Unofficial. Does not modify <code>.app</code> / <code>app.asar</code> / WindowsApps.
 </p>
 
+## Fork, attribution and video support
+
+This independent fork is based on [Fei-Away/Codex-Dream-Skin](https://github.com/Fei-Away/Codex-Dream-Skin), upstream v1.5.16.
+Thanks to Fei-Away and the upstream contributors for the theme engine, desktop clients,
+theme-library integration and documentation. [LhFang455](https://github.com/LhFang455)
+developed the macOS video extension and maintains its video-specific styling and compatibility fixes.
+The upstream content, community links, artwork credits and history are retained below.
+DreamSkin.cc is the upstream project's platform, not a service created by this fork.
+
+The original [MIT license](./LICENSE) and [notices](./macos/NOTICE.md) remain intact.
+Personal, non-commercial use describes the maintainer's intent, not an additional license restriction.
+The software license does not grant rights to third-party videos, artwork or trademarks.
+This fork is not an official or endorsed release of either upstream or OpenAI.
+
+### Video edition source snapshot — 2026-09-20
+
+- **macOS only:** local MP4 / WebM, non-empty and at most **100 MiB (104,857,600 bytes)**, muted and looping, without automatic recompression or media uploads.
+- Videos travel over local CDP in 1 MiB chunks and become a renderer-side Blob. Hot switches verify advancing playback before reporting success; the palette is sampled from a decoded frame.
+- Video-specific translucency keeps native controls interactive. The 26.915.31945 compatibility fix restores home hero background alpha 0.30 and project cap alpha 0.50, without fading text or changing static themes.
+- Home injection/playback verification passed on the maintainer's 26.915.31945 installation. Cold-start reliability and exact live home alpha values have not been fully revalidated; this is not a promise of compatibility with every future Codex update.
+- This is a **source-only sync**, not a new installer release. Existing release assets may lag behind `main`. No personal videos, private theme library or local app backups are included.
+
+### Use a video background
+
+1. Run a build of this fork containing video support, then open its macOS menu-bar app.
+2. Choose **Theme → Choose Video Background…** and select your local MP4 / WebM.
+3. Wait for application to finish. The theme is saved locally and can be selected again under saved themes.
+4. Select an image theme to switch back, or use Pause / Restore to stop the skin.
+
+The video limit is not the theme ZIP limit: ZIP import remains image-based. Windows video
+support is not claimed. Large/high-resolution videos cost memory, GPU time and battery;
+not every codec/profile is supported. See the [macOS video guide](./macos/README.md#video-backgrounds-current-compatibility-limit)
+for source installation, CLI usage and troubleshooting.
+
 ## 🤝 Exclusive sponsor
+
+> The following sponsorship text and links are retained from upstream. They describe upstream's sponsorship, not sponsorship of this fork; this fork has not independently verified the provider's marketing claims.
 
 <table>
 <tr>
@@ -45,7 +81,7 @@ Passion8 has a benefit for this project's users: register through <a href="https
 ## Install directly
 
 Ordinary users first install and quit the official Codex / ChatGPT app once,
-then download from [GitHub Releases](https://github.com/Fei-Away/Codex-Dream-Skin/releases):
+then download existing assets from [this fork's Releases](https://github.com/LhFang455/codex-dream-skin-video/releases). Check their release notes for video support; current source changes are not necessarily included:
 
 - macOS: open `CodexDreamSkin-vX.Y.Z.dmg` and drag the app to Applications.
 - Windows: run `CodexDreamSkin-Setup-vX.Y.Z.exe` and follow the wizard.
@@ -188,7 +224,7 @@ to use and save it for one-click switching.
 
 You do not need to clone the repository, install Node.js, or run `.sh` / `.ps1`
 files. Download the latest package for your platform from
-[GitHub Releases](https://github.com/Fei-Away/Codex-Dream-Skin/releases), then
+[this fork's Releases](https://github.com/LhFang455/codex-dream-skin-video/releases) (assets may lag behind current source), then
 follow the graphical first-run guide:
 
 | Platform | Download | Install guide |

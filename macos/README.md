@@ -8,10 +8,12 @@ This project injects through **local loopback CDP**. It does **not** modify the 
 
 > Not affiliated with OpenAI. Codex is a trademark of its respective owners.
 
-> This personal, non-commercial modification is based on
+> This independent video extension by [LhFang455](https://github.com/LhFang455) is based on
 > [Fei-Away/Codex-Dream-Skin](https://github.com/Fei-Away/Codex-Dream-Skin).
 > It retains the upstream MIT license and notices; it is not endorsed by or an
 > official release of the upstream project.
+> Thanks to the upstream authors and contributors. Personal non-commercial use is
+> the maintainer's intent, not an extra restriction on the MIT license.
 
 ## Requirements
 
@@ -21,10 +23,13 @@ This project injects through **local loopback CDP**. It does **not** modify the 
 
 ## Release install (recommended)
 
-普通用户请从 [GitHub Releases](https://github.com/2698685648/codex-dream-skin-video/releases) 下载
+普通用户请从 [本分支 Releases](https://github.com/LhFang455/codex-dream-skin-video/releases) 下载
 `CodexDreamSkin-vX.Y.Z.dmg`，按 [`docs/install-macos.md`](../docs/install-macos.md) 的图形界面步骤
 拖入 Applications。首次运行可能需要在“系统设置 → 隐私与安全性 → 仍要打开”确认一次；不需要
 运行 `xattr` 或安装源码。后续更新下载新的 DMG 覆盖安装即可，用户主题和图片会保留。
+
+当前视频版兼容修复仅同步源码，未发布新安装包。请核对 Release 说明是否包含所需功能；
+需要当前源码功能时使用下面的源码安装步骤，不能把旧上游安装包视为本分支视频版。
 
 ## Advanced: run from source
 
@@ -157,6 +162,39 @@ manual placement bypasses archive checks, so use trusted content only.
 
 ## Video backgrounds: current compatibility limit
 
+### Menu-bar workflow / 菜单操作
+
+在包含视频扩展的本分支菜单栏 App 中选择 **主题 → 选择视频背景…**
+（English: **Theme → Choose Video Background…**），选取 MP4 / WebM 并等待应用完成。
+导入会复制视频到本地活动主题并保存到主题库，之后可从“已保存的主题”切换。
+选择已保存的图片主题或“更换背景图”即可切回图片；暂停或恢复官方外观可停止主题。
+仅退出菜单栏工具不应被理解为已关闭 Codex 的 CDP 调试端口，安全边界见根目录 README。
+
+### Source / CLI workflow
+
+From the repository root, install the current engine without launching Codex, then
+import a video (the second command applies it and may restart Codex if hot apply fails):
+
+```bash
+bash macos/scripts/install-dream-skin-macos.sh --no-launch
+bash "$HOME/.codex/codex-dream-skin-studio/scripts/load-video-theme-macos.sh" \
+  --file "/absolute/path/to/background.mp4" --name "My video theme"
+```
+
+To build the native menu app with the video picker from current source:
+
+```bash
+bash macos/scripts/build-menubar-app.sh --output /tmp/CodexDreamSkin-Video.app
+```
+
+The native build requires a matching Xcode macOS SDK and Swift toolchain. Follow the build script's
+diagnostics if a prerequisite is missing. Do not run two menu-app copies together.
+The loader also accepts `--appearance auto|light|dark`, `--safe-area auto|left|right|center|none`
+and `--task-mode auto|ambient|banner|full|off`. `--no-apply` prepares and saves the theme
+without injecting it, but **still changes the active theme files**; it is not a dry run.
+
+### Limits and implementation
+
 Video themes are supported on macOS. Use a local **MP4 or WebM** file, muted and looping.
 The importer accepts at most **100 MiB (104,857,600 bytes)** and does not recompress the
 source. A file of 104,857,601 bytes is rejected before it can replace the active theme.
@@ -176,6 +214,25 @@ runtime. If a file cannot decode, has zero video dimensions, pauses, or does not
 the switch is marked failed and the existing restart fallback remains available. For broad
 compatibility, MP4 with H.264 video is the preferred starting point; keep an original copy
 because this app deliberately performs no quality-changing conversion.
+
+Video import does not extend the image-only ZIP/Studio format. Do not zip an MP4 and
+expect the theme ZIP importer to accept it. No Windows video support is claimed.
+Media stays local; use only video you have permission to use or redistribute.
+
+### Compatibility and troubleshooting
+
+- The 2026-09-20 source includes video-only home hero/project-cap translucency fixes
+  for Codex 26.915.31945 and the earlier suggestion-button foreground fix. Shared CSS
+  is generated for both platforms, but this is not native Windows video validation.
+- If loading fails, try a smaller H.264 MP4, then run Verify. A passing size check
+  alone does not prove decoder support or smooth playback; 4K can consume substantial
+  GPU, memory and battery even when playback verification succeeds.
+- Verification failures now list failed checks (for example `home` or `video`). Save
+  `~/Library/Application Support/CodexDreamSkinStudio/injector-error.log` **before retrying**: a new
+  start may truncate it. Redact private paths and content before sharing diagnostics.
+- Live home injection/playback passed on the maintainer's 26.915.31945 installation;
+  exact computed home alpha values and reliable cold-start behavior remain unverified.
+  This release of the source does not claim that all first-start failures are eliminated.
 
 ## Image and video guidelines
 

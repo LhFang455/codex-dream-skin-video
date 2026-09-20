@@ -11,6 +11,16 @@ const css = readFileSync(join(root, "assets", "dream-skin.css"), "utf8");
 const renderer = readFileSync(join(root, "assets", "renderer-inject.js"), "utf8");
 const injector = readFileSync(join(root, "scripts", "injector.mjs"), "utf8");
 
+test("26.915 video home restores hero and project cap translucency", () => {
+  const fix = css.slice(css.indexOf("/* 26.915:"), css.lastIndexOf("@layer dreamskin-accessibility"));
+  assert.match(fix, /data-dream-media-kind="video"[\s\S]*?> div:first-child > div:first-child > div:first-child\s*\{\s*background: rgb\(var\(--ds-panel-rgb\) \/ \.30\)/);
+  assert.match(fix, /::before\s*\{\s*content: none !important/);
+  assert.ok(fix.includes('_ComposerHomeUtilityBar_'));
+  assert.ok(fix.includes('_homeUtilityBar_'));
+  assert.match(fix, /data-composer-placement="home"[\s\S]*?data-composer-home-utility-bar-position="above"[\s\S]*?background: rgb\(var\(--ds-panel-rgb\) \/ \.50\)/);
+  assert.doesNotMatch(fix, /\n\s*opacity:/);
+});
+
 test("video hot apply keeps a healthy watcher and waits for playback evidence", () => {
   const videoBranch = common.match(/case "\$theme_media" in([\s\S]*?)\n  esac/);
   assert.ok(videoBranch, "hot apply must have a video-media branch");
@@ -181,6 +191,9 @@ test("video mode removes the sidebar-main divider and composer tint", () => {
 
 test("video home highlights remain readable over bright frames", () => {
   const finalOverrides = css.slice(css.lastIndexOf("Video-only overlay and search transparency"));
+  assert.match(finalOverrides,
+    /group\\\/home-suggestions button,[\s\S]*?group\\\/home-suggestions button :is\(svg, span\)\s*\{\s*color: #fff/,
+    "video suggestion buttons and their labels must share the same white foreground for home verification");
   assert.match(finalOverrides,
     /data-feature="game-source"[\s\S]*?color: #fff[\s\S]*?text-shadow:/,
     "the home brand and selected-project text must not use the low-contrast palette accent");

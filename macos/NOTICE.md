@@ -4,6 +4,19 @@ Codex Dream Skin Studio is an **unofficial** customization project and is **not 
 
 ## Software license
 
+### Video fork attribution
+
+[LhFang455/codex-dream-skin-video](https://github.com/LhFang455/codex-dream-skin-video)
+is derived from [Fei-Away/Codex-Dream-Skin](https://github.com/Fei-Away/Codex-Dream-Skin),
+based on upstream v1.5.16. Thanks to Fei-Away and all upstream contributors for the
+original engine, clients, documentation and community integration. LhFang455 added
+the macOS local-video extension and related styling/compatibility changes.
+The original copyright and MIT license text are retained unchanged. This fork does
+not imply upstream endorsement or ownership of upstream services or artwork.
+The maintainer's personal non-commercial usage intent does not alter the MIT license.
+User-supplied videos, like third-party images, carry their own rights and are not
+licensed or redistributed merely because the software can load them.
+
 The MIT License in `LICENSE` applies to the **software source code** in this repository (scripts, CSS, injectors, docs that describe the software, and the abstract demo asset generated for this repo).
 
 It does **not** grant rights to:

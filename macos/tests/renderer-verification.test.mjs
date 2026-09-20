@@ -141,6 +141,7 @@ async function verify(overrides = {}) {
 test("visible L1 renderer passes exact macOS verification", async () => {
   const result = await verify();
   assert.equal(result.pass, true);
+  assert.deepEqual(result.failedChecks, []);
   assert.equal(result.shell.visible, true);
   assert.equal(result.sidebar.visible, true);
 });
@@ -162,6 +163,7 @@ test("CSS-hidden, detached, and offscreen anchors cannot satisfy L1", async () =
   for (const [label, shell] of cases) {
     const result = await verify({ dom: makeDomFixture({ shell }) });
     assert.equal(result.pass, false, label);
+    assert.ok(result.failedChecks.includes("structure"), label);
     assert.equal(result.checks.structurePass, false, label);
     assert.equal(result.shell.visible, false, label);
   }

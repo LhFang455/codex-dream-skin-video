@@ -288,6 +288,18 @@ export function assessRendererVerification(renderer, nativeWindow, expected) {
     windowPass,
   };
   result.pass = Boolean(basePass && homePass && payloadPass && videoPass);
+  result.failedChecks = Object.entries({
+    installed: Boolean(result.installed),
+    version: result.version === expected.skinVersion,
+    stylePresent: Boolean(result.stylePresent),
+    businessClasses: result.businessClassPollution === 0,
+    structure: structurePass,
+    window: windowPass,
+    horizontalOverflow: !result.documentOverflow?.x,
+    home: Boolean(homePass),
+    payload: payloadPass,
+    video: videoPass,
+  }).filter(([, passed]) => !passed).map(([name]) => name);
   result.expectedThemeId = expected.expectedThemeId;
   result.expectedRevision = expected.expectedRevision;
   result.softNotes = {
@@ -2154,7 +2166,7 @@ async function runWatch(options) {
           500,
           current.theme.mediaKind,
         );
-        if (!verification?.pass) throw new Error("Theme refresh verification failed");
+        if (!verification?.pass) throw new Error(`Theme refresh verification failed: ${JSON.stringify(verification?.failedChecks ?? ["no-sample"])}`);
         verifiedTargets += 1;
         if (!externalOperation) {
           await presentOperationUi(session, operationToken, "success", `已应用「${current.theme.name}」`);
@@ -2430,7 +2442,7 @@ async function runWatch(options) {
             500,
             current.theme.mediaKind,
           );
-          if (!verification?.pass) throw new Error("Initial theme verification failed");
+          if (!verification?.pass) throw new Error(`Initial theme verification failed: ${JSON.stringify(verification?.failedChecks ?? ["no-sample"])}`);
           if (current.theme.mediaKind === "video" && initialOperation?.status === "applying") {
             await writeModeAck(options.operationAck, initialOperation.token, "applied");
           }

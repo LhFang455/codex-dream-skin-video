@@ -160,6 +160,9 @@ else
   verify_code=$?
 fi
 if [ "$verify_code" -ne 0 ]; then
+  # Preserve the first failed sample before the retry overwrites it. This is
+  # local diagnostic output; never discard the evidence of a startup race.
+  /bin/cat "$VERIFY_OUTPUT" >> "$INJECTOR_ERROR_LOG"
   # A slow App startup may register its reopen handler after CDP. Activate the
   # exact bundle once more before the final force-inject and verification pass.
   activate_codex_window
@@ -176,6 +179,7 @@ if [ "$verify_code" -ne 0 ]; then
   fi
 fi
 if [ "$verify_code" -ne 0 ]; then
+  /bin/cat "$VERIFY_OUTPUT" >> "$INJECTOR_ERROR_LOG"
   # Verify the PID/path/start-time tuple before changing state. If the watcher
   # cannot be stopped safely, preserve the state as evidence and fail closed.
   if ! stop_recorded_injector; then

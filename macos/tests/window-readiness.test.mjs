@@ -57,6 +57,24 @@ const baseRenderer = {
 assert.equal(readyNativeWindow.status, "ready");
 assert.equal(assessRendererVerification(baseRenderer, readyNativeWindow, exactPayload).pass, true);
 
+// September 10 live failure: all four video-home labels were white while
+// their button foreground was rgb(237, 237, 238). Keep the validator strict;
+// the video CSS must assign white to both the button and its labels.
+const videoHome = {
+  ...baseRenderer,
+  scope: { level: "L1", baseState: "home", missingL1: [] },
+  homeRoute: true,
+  homePresent: true,
+  hero: { visible: true, width: 780, height: 628 },
+  visibleCardCount: 4,
+  suggestionLabels: Array.from({ length: 4 }, () => ({ visible: true })),
+  suggestionLabelColorsMatch: false,
+};
+assert.equal(assessRendererVerification(videoHome, readyNativeWindow, exactPayload).pass, false);
+assert.equal(assessRendererVerification({
+  ...videoHome, suggestionLabelColorsMatch: true,
+}, readyNativeWindow, exactPayload).pass, true);
+
 const videoExpected = { ...exactPayload, expectedMediaKind: "video" };
 assert.equal(
   assessRendererVerification({ ...baseRenderer, video: null }, readyNativeWindow, videoExpected).pass,

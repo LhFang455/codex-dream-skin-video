@@ -1,5 +1,20 @@
 # Changelog
 
+## Video fork source snapshot — 2026-09-20 (not an installer release)
+
+The entries in this section describe LhFang455's fork. The upstream changelog is
+preserved below; its historical `Unreleased` heading is not a release promise by this fork.
+
+- macOS local MP4/WebM backgrounds: up to 100 MiB, no recompression, muted looping,
+  1 MiB CDP chunks assembled into a Blob, local saved themes and verified hot switching.
+- Video-specific translucent composer, messages and code surfaces. Codex 26.915.31945
+  home hero and project cap support with background alpha .30 and .50 respectively.
+- Consistent suggestion-button/child foreground colors to avoid a proven home
+  verification failure. Per-check startup failure details and focused regression tests.
+- Bilingual fork attribution, MIT clarification, video usage and compatibility limits.
+- Known limits: macOS video only; cold-start reliability is not fully revalidated;
+  a subsequent start can overwrite the previous error log. No new Release assets.
+
 ## Unreleased
 
 ### 新增

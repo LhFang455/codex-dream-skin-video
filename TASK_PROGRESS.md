@@ -1,5 +1,77 @@
 # Task Progress
 
+## Video fork source synchronization (2026-09-20)
+
+- Target: LhFang455/codex-dream-skin-video main. Remote main was verified at
+  8d7e477, matching the current branch base; no remote divergence detected.
+- Preserve upstream docs/history, MIT copyright and artwork notices. Added
+  explicit fork/upstream attribution, bilingual video workflow, CLI instructions,
+  media limits, known startup/log limitations and source-vs-release distinctions.
+- Carry forward the local startup diagnostics and video home CSS compatibility
+  patches. No private media, theme library or local app bundles are included.
+- Validation: macOS run-tests.sh passed with native Swift build/tests; signed-app
+  integrations and Doctor were deliberately skipped using the existing test flags.
+  Shared-asset sync, both payload checks, Windows payload tests, relative doc links,
+  unchanged license texts and diff whitespace checks passed. No Windows native run.
+- Source-only synchronization: use [skip release], leave versions/tags/assets
+  untouched. Explicit main push is the remaining step at this pre-commit checkpoint.
+
+## 26.915.31945 home translucency compatibility (2026-09-20)
+
+- Added video-only overrides for the legacy home hero surface (background
+  alpha .30, no duplicated art/scrim) and both utility class generations plus
+  the semantic above-composer cap (alpha .50). Text opacity is unchanged.
+- Synced macOS/Windows CSS, installed the user engine asset, rebuilt and
+  installed the arm64 menu app. Prior app saved as
+  ../Codex Dream Skin-before-20260920.app. All three CSS copies match.
+- 29 relevant tests passed across focused runs after correcting a test slice
+  boundary; both platform payload checks and asset sync passed. Real home
+  verification passed with revision caa1a505eb1dd9bcce3d, progressing 4K
+  video and no failures. The page switched to a thread before computed
+  background inspection, so the exact live home alpha values were not
+  measured. No Codex restart, remote push or release.
+
+## Confirmed video-home verification root cause (2026-09-10)
+
+- New retained failure sample on Codex 26.903.71938 proved only `home`
+  failed: four visible labels were white but button foreground was
+  rgb(237, 237, 238). Structure, payload, window and playing 4K video passed.
+  The September 9 diagnostic engine survived the application update.
+- Fixed canonical video CSS to set the suggestion button foreground to
+  the same white as its svg/span children. Synced both platform assets.
+  Strict color verification is unchanged. Added a CSS regression and a
+  four-card home verification fixture; the old CSS failed the new test.
+- 22 focused tests, window-readiness fixture, 6 runtime/Windows payload
+  tests, both payload checks and asset sync check passed. Native Windows
+  execution was not performed. Current live task page passes with revision
+  4061ba138fecab82e28a and progressing error-free 4K video; a real home-page
+  navigation/cold-start was not performed.
+- Installed fixed CSS and reapplied successfully. Rebuilt arm64 third-party
+  Dream Skin app and installed it with a verified ad-hoc signature, so a
+  local engine reinstall includes the fix. Original app retained at
+  ../Codex Dream Skin-before-20260910.app. Only the menu app restarted.
+  Source, installed engine and bundled CSS match. No remote push/release.
+
+## Startup verification investigation (2026-09-09)
+
+- User approved implementing the proposed verification repair. Working on
+  `fix/startup-verification-details`; preserve the current video and styling.
+- Live task-page verification passed all required checks. The historical
+  startup failure has no per-check evidence; home/timing is a hypothesis.
+- Added per-check diagnostics and retained failed startup samples. Installed
+  the two changed scripts into the existing user engine; original copies
+  have `.pre-verification-20260909` suffixes. Installed/source bytes match.
+- Reapply succeeded on the existing app process: session is `active`,
+  operation is `success`, and the watcher logged a verified injection.
+  The app was not restarted and the selected theme was preserved.
+- Validation: five renderer tests passed; macOS regression script passed,
+  including 12 Swift tests. Signed-app integration and Doctor used the
+  existing skip options; a real reapply provided the live smoke check.
+- Limitation: startup failure did not recur, so neither the home-rule
+  hypothesis nor a permanent startup fix is established. Acceptance rules
+  remain strict. Capture a failing startup sample before changing them.
+  No release or remote push performed.
+
 ## Merge current video edition into main (2026-09-04)
 
 - [scope] User explicitly approved merging the synchronized video edition

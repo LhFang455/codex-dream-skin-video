@@ -1668,8 +1668,34 @@ html[data-dream-skin="active"][data-dream-media-kind="video"] [role="main"]:has(
 }
 
 html[data-dream-skin="active"][data-dream-media-kind="video"] [role="main"]:has([data-testid="home-icon"])
+  .group\/home-suggestions button,
+html[data-dream-skin="active"][data-dream-media-kind="video"] [role="main"]:has([data-testid="home-icon"])
   .group\/home-suggestions button :is(svg, span) {
   color: #fff !important;
+}
+
+/* 26.915: the native home nesting can activate the legacy hero card again.
+   Keep its layout but use a video surface instead of an opaque image panel. */
+html[data-dream-skin="active"][data-dream-media-kind="video"]
+  [role="main"]:has([data-testid="home-icon"]) > div:first-child > div:first-child > div:first-child {
+  background: rgb(var(--ds-panel-rgb) / .30) !important;
+  box-shadow: 0 12px 28px rgb(var(--ds-bg-rgb) / .14) !important;
+  backdrop-filter: none !important;
+}
+
+html[data-dream-skin="active"][data-dream-media-kind="video"]
+  [role="main"]:has([data-testid="home-icon"]) > div:first-child > div:first-child > div:first-child::before {
+  content: none !important;
+}
+
+/* Cover both CSS Module generations and the separate semantic home cap.
+   Extra route attributes deliberately outrank the generic opaque cap rule. */
+html[data-dream-skin="active"][data-dream-media-kind="video"] :is([class*="_homeUtilityBar_"], [class*="_ComposerHomeUtilityBar_"]),
+html[data-dream-skin="active"][data-dream-media-kind="video"]
+  [data-codex-composer-root][data-composer-placement="home"]
+  [data-composer-home-utility-bar-position="above"] {
+  background: rgb(var(--ds-panel-rgb) / .50) !important;
+  backdrop-filter: none !important;
 }
 
 @layer dreamskin-accessibility {

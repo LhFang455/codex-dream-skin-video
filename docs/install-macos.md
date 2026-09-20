@@ -2,11 +2,14 @@
 
 本页面向只想使用主题的普通用户。不要 clone 仓库，也不需要安装 Node.js、Homebrew 或运行 shell 命令。
 
+> 本文保留上游的安装流程。本视频分支当前仅同步源码，未发布新的安装包；已有 Release
+> 是否包含视频功能请核对发布说明。需要当前源码时见 [macOS 源码与视频说明](../macos/README.md#video-backgrounds-current-compatibility-limit)。
+
 ## 首次安装
 
 先安装官方 ChatGPT / Codex 桌面应用，至少启动一次后退出，让它创建本机配置文件。
 
-1. 在 GitHub 的 [Releases](https://github.com/Fei-Away/Codex-Dream-Skin/releases) 下载最新的
+1. 在 GitHub 的 [本分支 Releases](https://github.com/LhFang455/codex-dream-skin-video/releases) 下载已有的
    `CodexDreamSkin-vX.Y.Z.dmg`。`SHA256SUMS.txt` 是可选的完整性校验文件。
 2. 双击 DMG，把 **Codex Dream Skin.app** 拖到 **Applications（应用程序）**。
 3. 第一次打开时，macOS 可能提示应用来自无法验证的开发者。这是因为公开发行包目前没有
